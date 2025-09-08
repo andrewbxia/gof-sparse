@@ -51,26 +51,23 @@ trait Add{
 impl AddSelf for PPair {
     #[inline(always)]
     fn addself(&mut self, other: &PPair) {
-        // extract high 32 as signed i32 (arithmetic shift)
-        let a_self = (*self >> 32) as i32;
-        let a_other = (*other >> 32) as i32;
-        // extract low 32 as signed i32: take low bits as u32 then interpret as i32
-        let b_self = (*self as u32) as i32;
-        let b_other = (*other as u32) as i32;
-
-        let a_sum = a_self.wrapping_add(a_other);
-        let b_sum = b_self.wrapping_add(b_other);
-
-        *self = PPair::pack(a_sum, b_sum);
+        // done by chatgpt
+        let a = *self;
+        let b = *other;
+        let hi = ((a >> 32) as i32).wrapping_add((b >> 32) as i32);
+        let lo = ((a as u32).wrapping_add(b as u32)) as i32;
+        *self = PPair::pack(hi, lo);
     }
 }
 
 impl Add for PPair {
     #[inline(always)]
     fn add(&self, other: PPair) -> PPair {
-        let a = ((*self >> 32) as i32).wrapping_add((other >> 32) as i32);
-        let b = ((*self as u32) as i32).wrapping_add((other as u32) as i32);
-        PPair::pack(a, b)
+        let a = *self;
+        let b = other;
+        let hi = ((a >> 32) as i32).wrapping_add((b >> 32) as i32);
+        let lo = ((a as u32).wrapping_add(b as u32)) as i32;
+        PPair::pack(hi, lo)
     }
 }
 
@@ -230,8 +227,11 @@ impl Game {
         // if(elapsed.as_millis() >= 200){
         if(true){
             clear_terminal();
-            // self.incbounds();
-
+            // self.incbounds(); 
+if(self.lifetime % 100 == 1){
+            // println!("spitting randommly...");
+            self.handleinput();
+        }
             self.ts.stamp("processactives".to_string());
 
             self.display();
@@ -246,10 +246,7 @@ impl Game {
             self.prevgen = nowgen;
         }
 
-        if(self.lifetime % 100 == 1){
-            // println!("spitting randommly...");
-            self.handleinput();
-        }
+        
 
         self.lifetime += 1;
         
@@ -287,7 +284,7 @@ impl Game {
         // placeholder
 
         let ((min_x, min_y), (max_x, max_y)) = self.bounds;
-        for _ in 0..50 {
+        for _ in 0..4000 {
             let x = self.seed.random_range(min_x..=max_x);
             let y = self.seed.random_range(min_y..=max_y);
             
@@ -419,7 +416,8 @@ impl Game {
 }
 
 const RESOLUTION: P16 = (160, 40); // x width, y height
-const DEF_BOUNDS: (Pair, Pair) = ((-20, -5), (20, 5)); // bottom left, top right
+// const DEF_BOUNDS: (Pair, Pair) = ((-20, -5), (20, 5)); // bottom left, top right
+const DEF_BOUNDS: (Pair, Pair) = ((0,0), (160, 40)); // bottom left, top right
 const TEST: PPair = ppair!(1, 2);
 fn main() {
     println!("Hello, world!");
