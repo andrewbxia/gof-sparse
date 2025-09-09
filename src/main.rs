@@ -51,7 +51,6 @@ trait Add{
 impl AddSelf for PPair {
     #[inline(always)]
     fn addself(&mut self, other: &PPair) {
-        // done by chatgpt
         let a = *self;
         let b = *other;
         let hi = ((a >> 32) as i32).wrapping_add((b >> 32) as i32);
@@ -211,7 +210,7 @@ impl Game {
         
         loop{
             self.loopgame();
-            std::thread::sleep(std::time::Duration::from_millis(75));
+            // std::thread::sleep(std::time::Duration::from_millis(75));
             // break;
         }
         // placeholder
@@ -223,24 +222,25 @@ impl Game {
         self.processactives();
 
 
-        // let elapsed = Instant::now() - self.frametimer;
-        // if(elapsed.as_millis() >= 200){
-        if(true){
-            clear_terminal();
-            // self.incbounds(); 
+        let elapsed = Instant::now() - self.frametimer;
+        
 if(self.lifetime % 100 == 1){
             // println!("spitting randommly...");
             self.handleinput();
         }
+        if(elapsed.as_millis() >= 200){
+        // if(true){
+            clear_terminal();
+            // self.incbounds(); 
             self.ts.stamp("processactives".to_string());
 
             self.display();
             self.ts.stamp("display".to_string());
 
             let nowgen = self.lifetime;
-            // println!("gens/s, {} [{} ms]", (nowgen - self.prevgen) * 1000 / elapsed.as_millis() as i32, 
-            //     elapsed.as_millis() as i32 / (nowgen - self.prevgen)
-            // );
+            println!("gens/s, {} [{} ms]", (nowgen - self.prevgen) * 1000 / elapsed.as_millis() as i32, 
+                elapsed.as_millis() as i32 / (nowgen - self.prevgen)
+            );
 
             self.frametimer = Instant::now();
             self.prevgen = nowgen;
@@ -415,9 +415,11 @@ impl Game {
 
 }
 
+
+
 const RESOLUTION: P16 = (160, 40); // x width, y height
 // const DEF_BOUNDS: (Pair, Pair) = ((-20, -5), (20, 5)); // bottom left, top right
-const DEF_BOUNDS: (Pair, Pair) = ((0,0), (160, 40)); // bottom left, top right
+const DEF_BOUNDS: (Pair, Pair) = ((0,0), (1600, 400)); // bottom left, top right
 const TEST: PPair = ppair!(1, 2);
 fn main() {
     println!("Hello, world!");
@@ -427,7 +429,6 @@ fn main() {
     //     print!("({},{}) ", a, b);
     // }
     // std::process::exit(0);
-
     let mut game = Game{
         bounds: DEF_BOUNDS,
         ..Default::default()
