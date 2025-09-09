@@ -1,5 +1,18 @@
 // shut up rustc i know there are unneeded parenthesis i used c++ SHDJOIAHDSFPF
 
+use error_iter::ErrorIter;
+use log::{debug, error};
+use pixels::{Error, Pixels, SurfaceTexture};
+use winit::{
+    dpi::LogicalSize,
+    event::{Event, WindowEvent},
+    event_loop::EventLoop,
+    keyboard::KeyCode,
+    window::WindowAttributes,
+};
+use winit_input_helper::WinitInputHelper;
+
+use wgpu::WindowHandle;
 use std::collections::{HashSet, HashMap};
 use ahash::{AHashSet, AHashMap};
 use std::io::{self, Write};
@@ -422,13 +435,10 @@ const RESOLUTION: P16 = (160, 40); // x width, y height
 const DEF_BOUNDS: (Pair, Pair) = ((0,0), (1600, 400)); // bottom left, top right
 const TEST: PPair = ppair!(1, 2);
 fn main() {
-    println!("Hello, world!");
-    // println!("Test pack: {}, unpack: {:?}", TEST, PPair::pack(1,2));
-    // for p in NEIGHBOR_OFFSETS_ALL {
-    //     let (a, b) = p.unpack();
-    //     print!("({},{}) ", a, b);
-    // }
-    // std::process::exit(0);
+
+    let eventloop = EventLoop::new().unwrap();
+    let mut 
+    
     let mut game = Game{
         bounds: DEF_BOUNDS,
         ..Default::default()
