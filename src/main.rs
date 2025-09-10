@@ -2,13 +2,14 @@
 
 use error_iter::ErrorIter;
 use log::{debug, error};
-use pixels::{Error, Pixels, SurfaceTexture};
+use pixels::{wgpu::Surface, Error, Pixels, SurfaceTexture};
 use winit::{
     dpi::LogicalSize,
     event::{Event, WindowEvent},
     event_loop::EventLoop,
+    event_loop::ActiveEventLoop,
     keyboard::KeyCode,
-    window::WindowAttributes,
+    window::{WindowAttributes, Window},
 };
 use winit_input_helper::WinitInputHelper;
 
@@ -220,7 +221,7 @@ impl Game {
     
     pub fn run(&mut self) {
         self.insertglider();
-        
+        return;
         loop{
             self.loopgame();
             // std::thread::sleep(std::time::Duration::from_millis(75));
@@ -428,20 +429,56 @@ impl Game {
 
 }
 
-
-
 const RESOLUTION: P16 = (160, 40); // x width, y height
 // const DEF_BOUNDS: (Pair, Pair) = ((-20, -5), (20, 5)); // bottom left, top right
 const DEF_BOUNDS: (Pair, Pair) = ((0,0), (1600, 400)); // bottom left, top right
 const TEST: PPair = ppair!(1, 2);
+const DISPLAYSCALE: f64 = 3.0;
 fn main() {
 
     let eventloop = EventLoop::new().unwrap();
-    let mut 
-    
+    let mut input = WinitInputHelper::new();
+
+    let window = {
+            let size = LogicalSize::new(RESOLUTION.0 as f64, RESOLUTION.1 as f64);
+            let scaledsize = LogicalSize::new(RESOLUTION.0 as f64 * DISPLAYSCALE, RESOLUTION.1 as f64 * DISPLAYSCALE);
+            let attr = Window::default_attributes()
+                .with_title("farts")
+                .with_inner_size(scaledsize)
+                .with_visible(true)
+                .with_resizable(false);
+            eventloop.create_window(attr).unwrap()
+    };
+
+    let mut pixels = {
+        let surfacetexture = SurfaceTexture::new(RESOLUTION.0 as u32, RESOLUTION.1 as u32, &window);
+        Pixels::new(RESOLUTION.0 as u32, RESOLUTION.1 as u32, surfacetexture).unwrap()
+    };
+
+    let mut paused = false;
+    let mut drawstate: Option<bool> = None; // none: not drawing
+
     let mut game = Game{
         bounds: DEF_BOUNDS,
         ..Default::default()
     };
-    game.run();
+    game.insertglider();
+
+    let res = eventloop.run(|event, elwt|{
+        if let Event::WindowEvent {
+            event: WindowEvent::RedrawRequested,
+            ..
+        } = event
+        {
+            life.draw(pixels.frame_mut());
+            if let Err(err) = pixels.render() {
+                log_error("pixels.render", err);
+                elwt.exit();
+                return;
+            }
+        }
+    }
+
+    );
+
 }
