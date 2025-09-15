@@ -216,6 +216,51 @@ fn clear_terminal() {
 }
 
 
+//thanks chatgpt
+fn draw_fps(frame: &mut [u8], fps: usize) {
+    const FONT: [[u8; 7]; 10] = [
+        [0b01110,0b10001,0b10011,0b10101,0b11001,0b10001,0b01110], // 0
+        [0b00100,0b01100,0b00100,0b00100,0b00100,0b00100,0b01110], // 1
+        [0b01110,0b10001,0b00001,0b00010,0b00100,0b01000,0b11111], // 2
+        [0b01110,0b10001,0b00001,0b00110,0b00001,0b10001,0b01110], // 3
+        [0b00010,0b00110,0b01010,0b10010,0b11111,0b00010,0b00010], // 4
+        [0b11111,0b10000,0b11110,0b00001,0b00001,0b10001,0b01110], // 5
+        [0b00110,0b01000,0b10000,0b11110,0b10001,0b10001,0b01110], // 6
+        [0b11111,0b00001,0b00010,0b00100,0b01000,0b01000,0b01000], // 7
+        [0b01110,0b10001,0b10001,0b01110,0b10001,0b10001,0b01110], // 8
+        [0b01110,0b10001,0b10001,0b01111,0b00001,0b00010,0b01100], // 9
+    ];
+    let digits = if fps < 10 {
+        vec![fps as u8]
+    } else if fps < 100 {
+        vec![(fps / 10) as u8, (fps % 10) as u8]
+    } else {
+        vec![(fps / 100) as u8, ((fps / 10) % 10) as u8, (fps % 10) as u8]
+    };
+
+    let color = WHITE;
+    let x_offset = 2;
+    let y_offset = 2;
+    let digit_spacing = 2;
+    let digit_width = 5;
+    let digit_height = 7;
+
+    for (i, &d) in digits.iter().enumerate() {
+        let font = FONT[d as usize];
+        for (row, bits) in font.iter().enumerate() {
+            for col in 0..digit_width {
+                if (bits >> (digit_width - 1 - col)) & 1 != 0 {
+                    let x = x_offset + i * (digit_width + digit_spacing) + col;
+                    let y = y_offset + row;
+                    if x < RESOLUTION.0 as usize && y < RESOLUTION.1 as usize {
+                        let idx = (y * RESOLUTION.0 as usize + x) * 4;
+                        frame[idx..idx + 4].copy_from_slice(&color);
+                    }
+                }
+            }
+        }
+    }
+}
 
 
 impl Game {
@@ -444,26 +489,16 @@ pub fn draw(&self, frame: &mut [u8]) {
 
 }
 
-const RESOLUTION: P16 = (1000, 400); // x width, y height
+const RESOLUTION: P16 = (1000, 600); // x width, y height
 // const DEF_BOUNDS: (Pair, Pair) = ((-20, -5), (20, 5)); // bottom left, top right
-const DEF_BOUNDS: (Pair, Pair) = ((-600,-200), (600, 200)); // bottom left, top right
-const TEST: PPair = ppair!(1, 2);
-const DISPLAYSCALE: f64 = 3.0;
+const DEF_BOUNDS: (Pair, Pair) = ((-500,-300), (500, 300)); // bottom left, top right
+const DISPLAYSCALE: f64 = 2.0;
 
 const RED: [u8; 4] = [0xff, 0x00, 0x00, 0xff]; // r g b a
 const GREEN: [u8; 4] = [0x00, 0xff, 0x00, 0xff];
 const BLUE: [u8; 4] = [0x00, 0x00, 0xff, 0xff];
 const WHITE: [u8; 4] = [0xff, 0xff, 0xff, 0xff];
 const BLACK: [u8; 4] = [0x00, 0x00, 0x00, 0xff];
-
-fn clearbuffer(pixels: &mut Pixels){
-    let frame = pixels.frame_mut();
-    for pixel in frame.chunks_exact_mut(4){
-        pixel.copy_from_slice(&BLACK);
-        print!("Hello World");
-    }
-}
-
 
 fn main() -> Result<(), Error> {
     let event_loop = EventLoop::new().unwrap();
@@ -497,21 +532,20 @@ fn main() -> Result<(), Error> {
     game.insertglider();
 
     let mut paused = false;
-    // `draw_state` tracks mouse drawing.
-    // Some(true) = drawing live cells
-    // Some(false) = erasing cells
-    // None = not drawing
     let mut draw_state: Option<bool> = None;
+
+    // FPS calculation variables
+    let mut last_fps_update = Instant::now();
+    let mut frame_count = 0;
+    let mut fps = 0;
+    let mut lastcursorpos: Pair = (0, 0);
 
     event_loop.run(move |event, elwt| {
         match event {
             Event::WindowEvent { event, .. } => match event {
-                // Handle window close
                 WindowEvent::CloseRequested => {
                     elwt.exit();
                 }
-
-                // Handle keyboard input
                 WindowEvent::KeyboardInput { event, .. } => {
                     if event.state == ElementState::Pressed {
                         if let Key::Named(NamedKey::Space) = event.logical_key {
@@ -519,26 +553,35 @@ fn main() -> Result<(), Error> {
                         }
                     }
                 }
-
-                // Handle mouse clicks to start/stop drawing
                 WindowEvent::MouseInput { state, button, .. } => {
                     match (state, button) {
                         (ElementState::Pressed, MouseButton::Left) => draw_state = Some(true),
                         (ElementState::Pressed, MouseButton::Right) => draw_state = Some(false),
                         (ElementState::Released, _) => draw_state = None,
-                        _ => game.handleinput(),
+                        _ => (),
                     }
                 }
-
-                // Handle mouse movement to draw/erase cells
                 WindowEvent::CursorMoved { position, .. } => {
                     if let Some(is_drawing) = draw_state {
-                        // Convert window position to pixel buffer coordinates
                         if let Ok(pos) = pixels.window_pos_to_pixel(position.into()) {
                            let (x, y) = (pos.0 as u16, pos.1 as u16);
                            let coord = PPair::topack(&game.mapsb(&(x, y)));
 
                            if is_drawing {
+                            for dx in -5..=5 {
+                                for dy in -5..=5 {
+                                    if rand::random::<u8>() % 9 != 0{
+                                        continue;
+                                    }
+                                    let new_coord = PPair::pack(lastcursorpos.0 + dx, lastcursorpos.1 + dy);
+                                    game.addcell(new_coord);
+                                }
+                            }
+
+
+
+                               lastcursorpos = coord.unpack();
+
                                game.addcell(coord);
                            } else {
                                game.removecell(&coord);
@@ -546,18 +589,24 @@ fn main() -> Result<(), Error> {
                         }
                     }
                 }
-
-                // Redraw the screen
                 WindowEvent::RedrawRequested => {
-                    // Update game state if not paused
                     if !paused {
                         game.processactives();
                     }
 
-                    // Draw the game state to the buffer
-                    game.draw(pixels.frame_mut());
+                    // FPS calculation
+                    frame_count += 1;
+                    let now = Instant::now();
+                    if now.duration_since(last_fps_update).as_secs_f32() >= 1.0 {
+                        fps = frame_count;
+                        frame_count = 0;
+                        last_fps_update = now;
+                    }
 
-                    // Render the buffer to the screen
+                    // drawing game to buffer
+                    game.draw(pixels.frame_mut());
+                    draw_fps(pixels.frame_mut(), fps);
+
                     if let Err(err) = pixels.render() {
                         error!("pixels.render() failed: {err}");
                         elwt.exit();
@@ -567,7 +616,6 @@ fn main() -> Result<(), Error> {
                 _ => (),
             },
             Event::AboutToWait => {
-                // Request a redraw to keep the animation running
                 window_clone.request_redraw();
             }
             _ => (),
