@@ -5,13 +5,14 @@ use log::{debug, error};
 use pixels::{wgpu::Surface, Error, Pixels, SurfaceTexture};
 use winit::{
     dpi::LogicalSize,
-    event::{Event, WindowEvent},
+    event::{Event, WindowEvent, ElementState, MouseButton},
     event_loop::EventLoop,
     event_loop::ActiveEventLoop,
-    keyboard::KeyCode,
+    keyboard::{Key, NamedKey},
     window::{WindowAttributes, Window},
 };
-use winit_input_helper::WinitInputHelper;
+use std::sync::Arc;
+
 
 use wgpu::WindowHandle;
 use std::collections::{HashSet, HashMap};
@@ -425,7 +426,21 @@ impl Game {
     println!();
     println!();
     }
+// Add this function inside your `impl Game` block
+pub fn draw(&self, frame: &mut [u8]) {
+    for (i, pixel) in frame.chunks_exact_mut(4).enumerate() {
+        let x = (i % RESOLUTION.0 as usize) as u16;
+        let y = (i / RESOLUTION.0 as usize) as u16;
 
+        let packed = PPair::topack(&self.mapsb(&(x, y)));
+        let color = if self.cells.contains(&packed) {
+            WHITE
+        } else {
+            BLACK
+        };
+        pixel.copy_from_slice(&color);
+    }
+}
 
 }
 
@@ -434,51 +449,130 @@ const RESOLUTION: P16 = (160, 40); // x width, y height
 const DEF_BOUNDS: (Pair, Pair) = ((0,0), (1600, 400)); // bottom left, top right
 const TEST: PPair = ppair!(1, 2);
 const DISPLAYSCALE: f64 = 3.0;
-fn main() {
 
-    let eventloop = EventLoop::new().unwrap();
-    let mut input = WinitInputHelper::new();
+const RED: [u8; 4] = [0xff, 0x00, 0x00, 0xff]; // r g b a
+const GREEN: [u8; 4] = [0x00, 0xff, 0x00, 0xff];
+const BLUE: [u8; 4] = [0x00, 0x00, 0xff, 0xff];
+const WHITE: [u8; 4] = [0xff, 0xff, 0xff, 0xff];
+const BLACK: [u8; 4] = [0x00, 0x00, 0x00, 0xff];
 
-    let window = {
-            let size = LogicalSize::new(RESOLUTION.0 as f64, RESOLUTION.1 as f64);
-            let scaledsize = LogicalSize::new(RESOLUTION.0 as f64 * DISPLAYSCALE, RESOLUTION.1 as f64 * DISPLAYSCALE);
-            let attr = Window::default_attributes()
-                .with_title("farts")
-                .with_inner_size(scaledsize)
-                .with_visible(true)
-                .with_resizable(false);
-            eventloop.create_window(attr).unwrap()
-    };
+fn clearbuffer(pixels: &mut Pixels){
+    let frame = pixels.frame_mut();
+    for pixel in frame.chunks_exact_mut(4){
+        pixel.copy_from_slice(&BLACK);
+        print!("Hello World");
+    }
+}
+
+
+fn main() -> Result<(), Error> {
+    let event_loop = EventLoop::new().unwrap();
+    
+    let window = Arc::new({
+        let size = LogicalSize::new(RESOLUTION.0 as f64, RESOLUTION.1 as f64);
+        let scaled_size = LogicalSize::new(
+            RESOLUTION.0 as f64 * DISPLAYSCALE,
+            RESOLUTION.1 as f64 * DISPLAYSCALE,
+        );
+        let attr = Window::default_attributes()
+            .with_title("Conway's Game of Life")
+            .with_inner_size(scaled_size)
+            .with_min_inner_size(size)
+            .with_resizable(false);
+        event_loop.create_window(attr).unwrap()
+    });
 
     let mut pixels = {
-        let surfacetexture = SurfaceTexture::new(RESOLUTION.0 as u32, RESOLUTION.1 as u32, &window);
-        Pixels::new(RESOLUTION.0 as u32, RESOLUTION.1 as u32, surfacetexture).unwrap()
+        let window_size = window.inner_size();
+        let surface_texture =
+            SurfaceTexture::new(window_size.width, window_size.height, &*window);
+        Pixels::new(RESOLUTION.0 as u32, RESOLUTION.1 as u32, surface_texture)?
     };
+    let window_clone = Arc::clone(&window);
 
-    let mut paused = false;
-    let mut drawstate: Option<bool> = None; // none: not drawing
-
-    let mut game = Game{
+    let mut game = Game {
         bounds: DEF_BOUNDS,
         ..Default::default()
     };
     game.insertglider();
 
-    let res = eventloop.run(|event, elwt|{
-        if let Event::WindowEvent {
-            event: WindowEvent::RedrawRequested,
-            ..
-        } = event
-        {
-            life.draw(pixels.frame_mut());
-            if let Err(err) = pixels.render() {
-                log_error("pixels.render", err);
-                elwt.exit();
-                return;
+    let mut paused = false;
+    // `draw_state` tracks mouse drawing.
+    // Some(true) = drawing live cells
+    // Some(false) = erasing cells
+    // None = not drawing
+    let mut draw_state: Option<bool> = None;
+
+    event_loop.run(move |event, elwt| {
+        match event {
+            Event::WindowEvent { event, .. } => match event {
+                // Handle window close
+                WindowEvent::CloseRequested => {
+                    elwt.exit();
+                }
+
+                // Handle keyboard input
+                WindowEvent::KeyboardInput { event, .. } => {
+                    if event.state == ElementState::Pressed {
+                        if let Key::Named(NamedKey::Space) = event.logical_key {
+                             paused = !paused;
+                        }
+                    }
+                }
+
+                // Handle mouse clicks to start/stop drawing
+                WindowEvent::MouseInput { state, button, .. } => {
+                    match (state, button) {
+                        (ElementState::Pressed, MouseButton::Left) => draw_state = Some(true),
+                        (ElementState::Pressed, MouseButton::Right) => draw_state = Some(false),
+                        (ElementState::Released, _) => draw_state = None,
+                        _ => (),
+                    }
+                }
+
+                // Handle mouse movement to draw/erase cells
+                WindowEvent::CursorMoved { position, .. } => {
+                    if let Some(is_drawing) = draw_state {
+                        // Convert window position to pixel buffer coordinates
+                        if let Ok(pos) = pixels.window_pos_to_pixel(position.into()) {
+                           let (x, y) = (pos.0 as u16, pos.1 as u16);
+                           let coord = PPair::topack(&game.mapsb(&(x, y)));
+
+                           if is_drawing {
+                               game.addcell(coord);
+                           } else {
+                               game.removecell(&coord);
+                           }
+                        }
+                    }
+                }
+
+                // Redraw the screen
+                WindowEvent::RedrawRequested => {
+                    // Update game state if not paused
+                    if !paused {
+                        game.processactives();
+                    }
+
+                    // Draw the game state to the buffer
+                    game.draw(pixels.frame_mut());
+
+                    // Render the buffer to the screen
+                    if let Err(err) = pixels.render() {
+                        error!("pixels.render() failed: {err}");
+                        elwt.exit();
+                        return;
+                    }
+                }
+                _ => (),
+            },
+            Event::AboutToWait => {
+                // Request a redraw to keep the animation running
+                window_clone.request_redraw();
             }
+            _ => (),
         }
-    }
+    }).unwrap();
 
-    );
-
+    Ok(())
 }
