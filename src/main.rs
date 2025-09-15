@@ -444,9 +444,9 @@ pub fn draw(&self, frame: &mut [u8]) {
 
 }
 
-const RESOLUTION: P16 = (160, 40); // x width, y height
+const RESOLUTION: P16 = (1000, 400); // x width, y height
 // const DEF_BOUNDS: (Pair, Pair) = ((-20, -5), (20, 5)); // bottom left, top right
-const DEF_BOUNDS: (Pair, Pair) = ((0,0), (1600, 400)); // bottom left, top right
+const DEF_BOUNDS: (Pair, Pair) = ((-600,-200), (600, 200)); // bottom left, top right
 const TEST: PPair = ppair!(1, 2);
 const DISPLAYSCALE: f64 = 3.0;
 
@@ -526,7 +526,7 @@ fn main() -> Result<(), Error> {
                         (ElementState::Pressed, MouseButton::Left) => draw_state = Some(true),
                         (ElementState::Pressed, MouseButton::Right) => draw_state = Some(false),
                         (ElementState::Released, _) => draw_state = None,
-                        _ => (),
+                        _ => game.handleinput(),
                     }
                 }
 
