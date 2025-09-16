@@ -471,17 +471,24 @@ impl Game {
     println!();
     println!();
     }
-// Add this function inside your `impl Game` block
-pub fn draw(&self, frame: &mut [u8]) {
+
+pub fn draw(&self, frame: &mut [u8], paused: bool, fades: &mut Vec<Vec<i8>>) {
     for (i, pixel) in frame.chunks_exact_mut(4).enumerate() {
         let x = (i % RESOLUTION.0 as usize) as u16;
         let y = (i / RESOLUTION.0 as usize) as u16;
 
+        let fadespos = &mut fades[y as usize][x as usize];
+
         let packed = PPair::topack(&self.mapsb(&(x, y)));
         let color = if self.cells.contains(&packed) {
+            *fadespos = 40;
             WHITE
         } else {
-            BLACK
+            if !paused {
+                *fadespos = max(0, *fadespos - 1);
+            }
+            
+            [BLUE[0], BLUE[1], BLUE[2], ((*fadespos as u8 * 10) as u8).min(255)]
         };
         pixel.copy_from_slice(&color);
     }
@@ -489,10 +496,10 @@ pub fn draw(&self, frame: &mut [u8]) {
 
 }
 
-const RESOLUTION: P16 = (1000, 600); // x width, y height
+const RESOLUTION: P16 = (200, 200); // x width, y height
 // const DEF_BOUNDS: (Pair, Pair) = ((-20, -5), (20, 5)); // bottom left, top right
-const DEF_BOUNDS: (Pair, Pair) = ((-500,-300), (500, 300)); // bottom left, top right
-const DISPLAYSCALE: f64 = 2.0;
+const DEF_BOUNDS: (Pair, Pair) = ((-100,-100), (100, 100)); // bottom left, top right
+const DISPLAYSCALE: f64 = 3.0;
 
 const RED: [u8; 4] = [0xff, 0x00, 0x00, 0xff]; // r g b a
 const GREEN: [u8; 4] = [0x00, 0xff, 0x00, 0xff];
@@ -540,6 +547,12 @@ fn main() -> Result<(), Error> {
     let mut fps = 0;
     let mut lastcursorpos: Pair = (0, 0);
 
+    let mut fades: Vec<Vec<i8>> = Vec::new();
+    fades.reserve(RESOLUTION.1 as usize);
+    for y in 0..RESOLUTION.1 {
+        fades.push(vec![0; RESOLUTION.0 as usize]);
+    }
+
     event_loop.run(move |event, elwt| {
         match event {
             Event::WindowEvent { event, .. } => match event {
@@ -558,8 +571,36 @@ fn main() -> Result<(), Error> {
                         (ElementState::Pressed, MouseButton::Left) => draw_state = Some(true),
                         (ElementState::Pressed, MouseButton::Right) => draw_state = Some(false),
                         (ElementState::Released, _) => draw_state = None,
+                        // Mouse wheel scrolling to zoom in/out
+                        // Only works if you add WindowEvent::MouseWheel to the match above
                         _ => (),
                     }
+                }
+                WindowEvent::MouseWheel { delta, .. } => {
+                    lastcursorpos;
+                    let scrollscale = 40;
+                    let (cx, cy) = lastcursorpos;
+                    let (min_x, min_y) = game.bounds.0;
+                    let (max_x, max_y) = game.bounds.1;
+
+                    let zoom = match delta {
+                        winit::event::MouseScrollDelta::LineDelta(_, y) => y as i32 * scrollscale,
+                        winit::event::MouseScrollDelta::PixelDelta(pos) => pos.y as i32,
+                    };
+
+                    // Clamp zoom to avoid division by zero
+                    let zoom_factor = if zoom > 0 {
+                        100 - zoom.abs()
+                    } else {
+                        100 + zoom.abs()
+                    }.max(10); // Prevent zoom_factor from being zero or negative
+
+                    let new_min_x = cx + ((min_x - cx) * zoom_factor) / 100;
+                    let new_max_x = cx + ((max_x - cx) * zoom_factor) / 100;
+                    let new_min_y = cy + ((min_y - cy) * zoom_factor) / 100;
+                    let new_max_y = cy + ((max_y - cy) * zoom_factor) / 100;
+
+                    game.bounds = ((new_min_x, new_min_y), (new_max_x, new_max_y));
                 }
                 WindowEvent::CursorMoved { position, .. } => {
                     if let Some(is_drawing) = draw_state {
@@ -568,22 +609,20 @@ fn main() -> Result<(), Error> {
                            let coord = PPair::topack(&game.mapsb(&(x, y)));
 
                            if is_drawing {
-                            for dx in -5..=5 {
-                                for dy in -5..=5 {
-                                    if rand::random::<u8>() % 9 != 0{
+                            for dx in -15..=15 {
+                                for dy in -15..=15 {
+                                    if rand::random::<u8>() % 5 != 0{
                                         continue;
                                     }
                                     let new_coord = PPair::pack(lastcursorpos.0 + dx, lastcursorpos.1 + dy);
                                     game.addcell(new_coord);
                                 }
                             }
-
-
-
                                lastcursorpos = coord.unpack();
 
                                game.addcell(coord);
-                           } else {
+                           }
+                           else {
                                game.removecell(&coord);
                            }
                         }
@@ -594,7 +633,6 @@ fn main() -> Result<(), Error> {
                         game.processactives();
                     }
 
-                    // FPS calculation
                     frame_count += 1;
                     let now = Instant::now();
                     if now.duration_since(last_fps_update).as_secs_f32() >= 1.0 {
@@ -603,8 +641,7 @@ fn main() -> Result<(), Error> {
                         last_fps_update = now;
                     }
 
-                    // drawing game to buffer
-                    game.draw(pixels.frame_mut());
+                    game.draw(pixels.frame_mut(), paused, &mut fades);
                     draw_fps(pixels.frame_mut(), fps);
 
                     if let Err(err) = pixels.render() {
