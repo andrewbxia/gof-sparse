@@ -500,6 +500,7 @@ const RESOLUTION: P16 = (200, 200); // x width, y height
 // const DEF_BOUNDS: (Pair, Pair) = ((-20, -5), (20, 5)); // bottom left, top right
 const DEF_BOUNDS: (Pair, Pair) = ((-100,-100), (100, 100)); // bottom left, top right
 const DISPLAYSCALE: f64 = 3.0;
+const ZOOMSPEED: f32 = 0.15;
 
 const RED: [u8; 4] = [0xff, 0x00, 0x00, 0xff]; // r g b a
 const GREEN: [u8; 4] = [0x00, 0xff, 0x00, 0xff];
@@ -517,7 +518,7 @@ fn main() -> Result<(), Error> {
             RESOLUTION.1 as f64 * DISPLAYSCALE,
         );
         let attr = Window::default_attributes()
-            .with_title("Conway's Game of Life")
+            .with_title("hey stop peeking everywhere")
             .with_inner_size(scaled_size)
             .with_min_inner_size(size)
             .with_resizable(false);
@@ -545,7 +546,9 @@ fn main() -> Result<(), Error> {
     let mut last_fps_update = Instant::now();
     let mut frame_count = 0;
     let mut fps = 0;
+
     let mut lastcursorpos: Pair = (0, 0);
+    let mut targetbounds: (Pair, Pair) = game.bounds.clone();
 
     let mut fades: Vec<Vec<i8>> = Vec::new();
     fades.reserve(RESOLUTION.1 as usize);
@@ -577,8 +580,7 @@ fn main() -> Result<(), Error> {
                     }
                 }
                 WindowEvent::MouseWheel { delta, .. } => {
-                    lastcursorpos;
-                    let scrollscale = 40;
+                    let scrollscale = 30;
                     let (cx, cy) = lastcursorpos;
                     let (min_x, min_y) = game.bounds.0;
                     let (max_x, max_y) = game.bounds.1;
@@ -600,14 +602,17 @@ fn main() -> Result<(), Error> {
                     let new_min_y = cy + ((min_y - cy) * zoom_factor) / 100;
                     let new_max_y = cy + ((max_y - cy) * zoom_factor) / 100;
 
-                    game.bounds = ((new_min_x, new_min_y), (new_max_x, new_max_y));
+
+
+                    game.bounds = ((new_min_x, new_min_y), (new_max_x.max(new_min_x + 10), new_max_y.max(new_min_y + 10)));
                 }
                 WindowEvent::CursorMoved { position, .. } => {
-                    if let Some(is_drawing) = draw_state {
-                        if let Ok(pos) = pixels.window_pos_to_pixel(position.into()) {
-                           let (x, y) = (pos.0 as u16, pos.1 as u16);
-                           let coord = PPair::topack(&game.mapsb(&(x, y)));
+                    if let Ok(pos) = pixels.window_pos_to_pixel(position.into()) {
+                        let coord = PPair::topack(&game.mapsb(&(pos.0 as u16, pos.1 as u16)));
+                        lastcursorpos = coord.unpack();
 
+                        if let Some(is_drawing) = draw_state {
+                            let coord = PPair::topack(&game.mapsb(&(pos.0 as u16, pos.1 as u16)));
                            if is_drawing {
                             for dx in -15..=15 {
                                 for dy in -15..=15 {
@@ -629,9 +634,21 @@ fn main() -> Result<(), Error> {
                     }
                 }
                 WindowEvent::RedrawRequested => {
+                    game.ts.bump();
                     if !paused {
                         game.processactives();
                     }
+                    if(rand::random::<u8>() % 60 == 0) {
+                        game.ts.stamp("processactives".to_string());
+                        println!("Active cells: {}", game.active.len());
+                        println!("cells: {}", game.cells.len());
+
+                    }
+
+                    game.bounds.0.0 += (targetbounds.0.0 - game.bounds.0.0) / 10;
+                    game.bounds.0.1 += (targetbounds.0.1 - game.bounds.0.1) / 10;
+                    game.bounds.1.0 += (targetbounds.1.0 - game.bounds.1.0) / 10;
+                    game.bounds.1.1 += (targetbounds.1.1 - game.bounds.1.1) / 10;
 
                     frame_count += 1;
                     let now = Instant::now();
@@ -640,8 +657,12 @@ fn main() -> Result<(), Error> {
                         frame_count = 0;
                         last_fps_update = now;
                     }
-
+                    game.ts.bump();
                     game.draw(pixels.frame_mut(), paused, &mut fades);
+                    if rand::random::<u8>() % 60 == 0 {
+                    game.ts.stamp("draw".to_string());
+                    }
+
                     draw_fps(pixels.frame_mut(), fps);
 
                     if let Err(err) = pixels.render() {
