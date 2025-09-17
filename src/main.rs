@@ -481,7 +481,7 @@ pub fn draw(&self, frame: &mut [u8], paused: bool, fades: &mut Vec<Vec<i8>>) {
 
         let packed = PPair::topack(&self.mapsb(&(x, y)));
         let color = if self.cells.contains(&packed) {
-            *fadespos = 40;
+            *fadespos = 108;
             WHITE
         } else {
             if !paused {
@@ -496,10 +496,10 @@ pub fn draw(&self, frame: &mut [u8], paused: bool, fades: &mut Vec<Vec<i8>>) {
 
 }
 
-const RESOLUTION: P16 = (200, 200); // x width, y height
+const RESOLUTION: P16 = (1920/2, 1080/2); // x width, y height
 // const DEF_BOUNDS: (Pair, Pair) = ((-20, -5), (20, 5)); // bottom left, top right
-const DEF_BOUNDS: (Pair, Pair) = ((-100,-100), (100, 100)); // bottom left, top right
-const DISPLAYSCALE: f64 = 3.0;
+const DEF_BOUNDS: (Pair, Pair) = ((0, 0), (1920, 1080)); // bottom left, top right
+const DISPLAYSCALE: f64 = 2.0;
 const ZOOMSPEED: f32 = 0.15;
 
 const RED: [u8; 4] = [0xff, 0x00, 0x00, 0xff]; // r g b a
@@ -580,22 +580,20 @@ fn main() -> Result<(), Error> {
                     }
                 }
                 WindowEvent::MouseWheel { delta, .. } => {
-                    let scrollscale = 30;
+                    let scrollscale = 50;
                     let (cx, cy) = lastcursorpos;
                     let (min_x, min_y) = game.bounds.0;
                     let (max_x, max_y) = game.bounds.1;
 
-                    let zoom = match delta {
+                    let zoom = match delta{
                         winit::event::MouseScrollDelta::LineDelta(_, y) => y as i32 * scrollscale,
                         winit::event::MouseScrollDelta::PixelDelta(pos) => pos.y as i32,
                     };
 
-                    // Clamp zoom to avoid division by zero
-                    let zoom_factor = if zoom > 0 {
-                        100 - zoom.abs()
-                    } else {
-                        100 + zoom.abs()
-                    }.max(10); // Prevent zoom_factor from being zero or negative
+                    let zoom_factor = {
+                        100 - zoom
+                    }.max(10);
+
 
                     let new_min_x = cx + ((min_x - cx) * zoom_factor) / 100;
                     let new_max_x = cx + ((max_x - cx) * zoom_factor) / 100;
@@ -604,7 +602,7 @@ fn main() -> Result<(), Error> {
 
 
 
-                    game.bounds = ((new_min_x, new_min_y), (new_max_x.max(new_min_x + 10), new_max_y.max(new_min_y + 10)));
+                    targetbounds = ((new_min_x, new_min_y), (new_max_x.max(new_min_x + 20), new_max_y.max(new_min_y + 11)));
                 }
                 WindowEvent::CursorMoved { position, .. } => {
                     if let Ok(pos) = pixels.window_pos_to_pixel(position.into()) {
