@@ -481,10 +481,10 @@ pub fn draw(&self, frame: &mut [u8], paused: bool, fades: &mut Vec<Vec<i8>>) {
 
         let packed = PPair::topack(&self.mapsb(&(x, y)));
         let color = if self.cells.contains(&packed) {
-            *fadespos = 108;
+            *fadespos = 100 + (rand::random::<u8>() % 4) as i8;
             WHITE
         } else {
-            if !paused {
+            if true {//  !paused {
                 *fadespos = max(0, *fadespos - 1);
             }
             
@@ -601,8 +601,8 @@ fn main() -> Result<(), Error> {
                     let new_max_y = cy + ((max_y - cy) * zoom_factor) / 100;
 
 
-
                     targetbounds = ((new_min_x, new_min_y), (new_max_x.max(new_min_x + 20), new_max_y.max(new_min_y + 11)));
+                    // game.bounds
                 }
                 WindowEvent::CursorMoved { position, .. } => {
                     if let Ok(pos) = pixels.window_pos_to_pixel(position.into()) {
