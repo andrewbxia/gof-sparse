@@ -216,20 +216,21 @@ fn clear_terminal() {
 }
 
 
+const FONT: [[u8; 7]; 10] = [
+    [0b01110,0b10001,0b10011,0b10101,0b11001,0b10001,0b01110], // 0
+    [0b00100,0b01100,0b00100,0b00100,0b00100,0b00100,0b01110], // 1
+    [0b01110,0b10001,0b00001,0b00010,0b00100,0b01000,0b11111], // 2
+    [0b01110,0b10001,0b00001,0b00110,0b00001,0b10001,0b01110], // 3
+    [0b00010,0b00110,0b01010,0b10010,0b11111,0b00010,0b00010], // 4
+    [0b11111,0b10000,0b11110,0b00001,0b00001,0b10001,0b01110], // 5
+    [0b00110,0b01000,0b10000,0b11110,0b10001,0b10001,0b01110], // 6
+    [0b11111,0b00001,0b00010,0b00100,0b01000,0b01000,0b01000], // 7
+    [0b01110,0b10001,0b10001,0b01110,0b10001,0b10001,0b01110], // 8
+    [0b01110,0b10001,0b10001,0b01111,0b00001,0b00010,0b01100], // 9
+];
+
 //thanks chatgpt
 fn draw_fps(frame: &mut [u8], fps: usize) {
-    const FONT: [[u8; 7]; 10] = [
-        [0b01110,0b10001,0b10011,0b10101,0b11001,0b10001,0b01110], // 0
-        [0b00100,0b01100,0b00100,0b00100,0b00100,0b00100,0b01110], // 1
-        [0b01110,0b10001,0b00001,0b00010,0b00100,0b01000,0b11111], // 2
-        [0b01110,0b10001,0b00001,0b00110,0b00001,0b10001,0b01110], // 3
-        [0b00010,0b00110,0b01010,0b10010,0b11111,0b00010,0b00010], // 4
-        [0b11111,0b10000,0b11110,0b00001,0b00001,0b10001,0b01110], // 5
-        [0b00110,0b01000,0b10000,0b11110,0b10001,0b10001,0b01110], // 6
-        [0b11111,0b00001,0b00010,0b00100,0b01000,0b01000,0b01000], // 7
-        [0b01110,0b10001,0b10001,0b01110,0b10001,0b10001,0b01110], // 8
-        [0b01110,0b10001,0b10001,0b01111,0b00001,0b00010,0b01100], // 9
-    ];
     let digits = if fps < 10 {
         vec![fps as u8]
     } else if fps < 100 {
@@ -437,7 +438,7 @@ impl Game {
 
     return (scx, scy);
     }
-    pub fn mapsb(&self, scloc: &P16) -> Pair{
+    pub fn mapsb(&self, scloc: P16) -> Pair{
         // maps screen loc to BOUNDS location
         let (distx, disty): Pair;
         distx = (self.bounds.1.0 - self.bounds.0.0);
@@ -454,7 +455,7 @@ impl Game {
     pub fn display(&self){
     for y in 0..RESOLUTION.1{
         for x in 0..RESOLUTION.0{
-            let packed = PPair::topack(&self.mapsb(&(x, y)));
+            let packed = PPair::topack(&self.mapsb((x, y)));
             if !self.cells.contains(&packed){
                 print!(".");
             }
@@ -472,41 +473,124 @@ impl Game {
     println!();
     }
 
-pub fn draw(&self, frame: &mut [u8], paused: bool, fades: &mut Vec<Vec<i8>>) {
-    for (i, pixel) in frame.chunks_exact_mut(4).enumerate() {
-        let x = (i % RESOLUTION.0 as usize) as u16;
-        let y = (i / RESOLUTION.0 as usize) as u16;
+    pub fn draw(&self, frame: &mut [u8], paused: bool, fades: &mut Vec<Vec<i8>>) {
+        let mut x = 0;
+        let mut y = 0;
+        for (i, pixel) in frame.chunks_exact_mut(4).enumerate() {
 
-        let fadespos = &mut fades[y as usize][x as usize];
 
-        let packed = PPair::topack(&self.mapsb(&(x, y)));
-        let color = if self.cells.contains(&packed) {
-            *fadespos = 100 + (rand::random::<u8>() % 4) as i8;
-            WHITE
-        } else {
-            if true {//  !paused {
-                *fadespos = max(0, *fadespos - 1);
+            let fadespos = &mut fades[y as usize][x as usize];
+
+            let packed = PPair::topack(&self.mapsb((x, y)));
+            let color = if self.cells.contains(&packed) {
+                *fadespos = 100 + (rand::random::<u8>() % 4) as i8;
+                WHITE
+            } else {
+                if true {//  !paused {
+                    *fadespos = max(0, *fadespos - 1);
+                }
+                // BLACK
+                
+                [BLUE[0], BLUE[1], BLUE[2], ((*fadespos as u8 * 10) as u8).min(255)]
+            };
+            x += 1;
+            if(x >= RESOLUTION.0){
+                x = 0;
+                y += 1;
             }
-            
-            [BLUE[0], BLUE[1], BLUE[2], ((*fadespos as u8 * 10) as u8).min(255)]
-        };
-        pixel.copy_from_slice(&color);
+            pixel.copy_from_slice(&color);
+        }
+    }
+
+}
+impl Game {
+    /// Optimized draw: rasterize live cells to a dense screen buffer then paint.
+    pub fn draw_optimized(&mut self, frame: &mut [u8], paused: bool, fades: &mut Vec<Vec<i8>>) {
+        let resx = RESOLUTION.0 as usize;
+        let resy = RESOLUTION.1 as usize;
+        let screen_size = resx * resy;
+
+        // 1) prepare screen occupancy buffer (0 = empty, 1 = live)
+        // reuse a Vec<u8> allocated once (here we create; you can store it in Game to reuse)
+        let mut screen: Vec<bool> = vec![false; screen_size];
+
+        // precompute bounds -> scaling factors (use integer-safe mapping)
+        let (min_x, min_y) = self.bounds.0;
+        let (max_x, max_y) = self.bounds.1;
+        let distx = (max_x - min_x).max(1);
+        let disty = (max_y - min_y).max(1);
+
+
+        // Using integer arithmetic: scx = ((x - min_x) * resx) / distx
+        // rasterize each live cell once
+        for &pp in &self.cells {
+            // unpack inline
+            let wx = (pp >> 32) as i32;
+            let wy = (pp & 0xffff_ffff) as u32 as i32;
+
+            // map world -> screen (clamp)
+            let sx = (((wx - min_x) * resx as i32) / distx);
+            let sy = (((wy - min_y) * resy as i32) / disty);
+
+            let nsx = (((wx - min_x + 1) * resx as i32) / distx);
+            let nsy = (((wy - min_y + 1) * resy as i32) / disty);
+
+            if sx >= 0 && sy >= 0 && (sx as usize) < resx && (sy as usize) < resy {
+
+
+                let idx = (sy as usize) * resx + (sx as usize);
+                for y in sy..nsy{
+                    for x in sx..nsx{
+                        screen[(y as usize) * resx + (x as usize)] = true;
+                    }
+                }
+                // screen[idx] = true;
+            }
+        }
+
+        // 2) Now fill frame once using the dense screen buffer
+        // iterate in the same order you do pixel writing
+        let mut idx: usize = 0;
+        for y in 0..resy {
+            for x in 0..resx {
+                let fadespos = &mut fades[y][x];
+                let buffer_val = screen[idx]; // 0 or 1
+
+                let color: [u8;4] = if buffer_val {
+                    // live cell: set fade and color
+                    let random = rand::random::<u8>();
+                    *fadespos = 100 + ((random & (FADERANDOMNESS - 1)) as i8);
+                    WHITE
+                } else {
+                    // background: decay fade
+                    if !paused {
+                        *fadespos = max(0, *fadespos - 1);
+                    }
+                    [BLUE[0], BLUE[1], BLUE[2], ((*fadespos as u8 * 10) as u8).min(255)]
+                };
+
+                let fidx = idx * 4;
+                frame[fidx..fidx+4].copy_from_slice(&color);
+                idx += 1;
+            }
+        }
     }
 }
 
-}
-
+const FADERANDOMNESSEXP: u8 = 2;
+const FADERANDOMNESS: u8 = 1 << FADERANDOMNESSEXP;
 const RESOLUTION: P16 = (1920/2, 1080/2); // x width, y height
 // const DEF_BOUNDS: (Pair, Pair) = ((-20, -5), (20, 5)); // bottom left, top right
 const DEF_BOUNDS: (Pair, Pair) = ((0, 0), (1920, 1080)); // bottom left, top right
 const DISPLAYSCALE: f64 = 2.0;
-const ZOOMSPEED: f32 = 0.15;
+const ZOOMSPEED: i32 = 40;
 
 const RED: [u8; 4] = [0xff, 0x00, 0x00, 0xff]; // r g b a
 const GREEN: [u8; 4] = [0x00, 0xff, 0x00, 0xff];
 const BLUE: [u8; 4] = [0x00, 0x00, 0xff, 0xff];
 const WHITE: [u8; 4] = [0xff, 0xff, 0xff, 0xff];
 const BLACK: [u8; 4] = [0x00, 0x00, 0x00, 0xff];
+
 
 fn main() -> Result<(), Error> {
     let event_loop = EventLoop::new().unwrap();
@@ -572,7 +656,11 @@ fn main() -> Result<(), Error> {
                 WindowEvent::MouseInput { state, button, .. } => {
                     match (state, button) {
                         (ElementState::Pressed, MouseButton::Left) => draw_state = Some(true),
-                        (ElementState::Pressed, MouseButton::Right) => draw_state = Some(false),
+                        (ElementState::Pressed, MouseButton::Right) => {
+                            game.cells.clear();
+                            game.active.clear();
+                            game.nmap.clear();
+                        },
                         (ElementState::Released, _) => draw_state = None,
                         // Mouse wheel scrolling to zoom in/out
                         // Only works if you add WindowEvent::MouseWheel to the match above
@@ -580,13 +668,12 @@ fn main() -> Result<(), Error> {
                     }
                 }
                 WindowEvent::MouseWheel { delta, .. } => {
-                    let scrollscale = 50;
                     let (cx, cy) = lastcursorpos;
                     let (min_x, min_y) = game.bounds.0;
                     let (max_x, max_y) = game.bounds.1;
 
                     let zoom = match delta{
-                        winit::event::MouseScrollDelta::LineDelta(_, y) => y as i32 * scrollscale,
+                        winit::event::MouseScrollDelta::LineDelta(_, y) => y as i32 * ZOOMSPEED,
                         winit::event::MouseScrollDelta::PixelDelta(pos) => pos.y as i32,
                     };
 
@@ -606,11 +693,11 @@ fn main() -> Result<(), Error> {
                 }
                 WindowEvent::CursorMoved { position, .. } => {
                     if let Ok(pos) = pixels.window_pos_to_pixel(position.into()) {
-                        let coord = PPair::topack(&game.mapsb(&(pos.0 as u16, pos.1 as u16)));
+                        let coord = PPair::topack(&game.mapsb((pos.0 as u16, pos.1 as u16)));
                         lastcursorpos = coord.unpack();
 
                         if let Some(is_drawing) = draw_state {
-                            let coord = PPair::topack(&game.mapsb(&(pos.0 as u16, pos.1 as u16)));
+                            let coord = PPair::topack(&game.mapsb((pos.0 as u16, pos.1 as u16)));
                            if is_drawing {
                             for dx in -15..=15 {
                                 for dy in -15..=15 {
@@ -656,7 +743,8 @@ fn main() -> Result<(), Error> {
                         last_fps_update = now;
                     }
                     game.ts.bump();
-                    game.draw(pixels.frame_mut(), paused, &mut fades);
+                    // game.draw(pixels.frame_mut(), paused, &mut fades);
+                    game.draw_optimized(pixels.frame_mut(), paused, &mut fades);
                     if rand::random::<u8>() % 60 == 0 {
                     game.ts.stamp("draw".to_string());
                     }
