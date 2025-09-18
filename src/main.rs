@@ -215,8 +215,9 @@ fn clear_terminal() {
     io::stdout().flush().unwrap();
 }
 
+const FONT_SLASH: [u8; 7] = [0b00001,0b00010,0b00100,0b01000,0b10000,0b00000,0b00000];
 
-const FONT: [[u8; 7]; 10] = [
+const FONT: [[u8; 7]; 11] = [
     [0b01110,0b10001,0b10011,0b10101,0b11001,0b10001,0b01110], // 0
     [0b00100,0b01100,0b00100,0b00100,0b00100,0b00100,0b01110], // 1
     [0b01110,0b10001,0b00001,0b00010,0b00100,0b01000,0b11111], // 2
@@ -227,6 +228,7 @@ const FONT: [[u8; 7]; 10] = [
     [0b11111,0b00001,0b00010,0b00100,0b01000,0b01000,0b01000], // 7
     [0b01110,0b10001,0b10001,0b01110,0b10001,0b10001,0b01110], // 8
     [0b01110,0b10001,0b10001,0b01111,0b00001,0b00010,0b01100], // 9
+    FONT_SLASH // /
 ];
 
 //thanks chatgpt
@@ -244,7 +246,7 @@ fn draw_fps(frame: &mut [u8], fps: usize) {
     let y_offset = 2;
     let digit_spacing = 2;
     let digit_width = 5;
-    let digit_height = 7;
+    let _digit_height = 7;
 
     for (i, &d) in digits.iter().enumerate() {
         let font = FONT[d as usize];
@@ -262,7 +264,98 @@ fn draw_fps(frame: &mut [u8], fps: usize) {
         }
     }
 }
+fn draw_actives_len(frame: &mut [u8], actives: usize, total: usize){
+    let activesdigits = {
+        let mut digitvec = Vec::new();
 
+        let mut total = total; // total before actives before reversing
+        if total == 0 {
+            digitvec.push(0);
+        }
+        while total >= 10 {
+            digitvec.push((total % 10) as u8);
+            total /= 10;
+        }
+        digitvec.push(total as u8); // Ensure last digit is pushed
+
+        digitvec.push(10); // slash
+
+        let mut actives = actives;
+        if actives == 0 {
+            digitvec.push(0);
+        }
+        while actives >= 10 {
+            digitvec.push((actives % 10) as u8);
+            actives /= 10;
+        }
+        digitvec.push(actives as u8); // Ensure last digit is pushed
+        digitvec.reverse();
+        digitvec
+    };
+
+    let color = GREEN;
+    let x_offset = 2;
+    let y_offset = 12; // below FPS (FPS is at y=2, height=7, spacing=3)
+    let digit_spacing = 2;
+    let digit_width = 5;
+    let digit_height = 7;
+
+    for (i, &d) in activesdigits.iter().enumerate() {
+        let font = FONT[d as usize];
+        for (row, bits) in font.iter().enumerate() {
+            for col in 0..digit_width {
+                if (bits >> (digit_width - 1 - col)) & 1 != 0 {
+                    let x = x_offset + i * (digit_width + digit_spacing) + col;
+                    let y = y_offset + row;
+                    if x < RESOLUTION.0 as usize && y < RESOLUTION.1 as usize {
+                        let idx = (y * RESOLUTION.0 as usize + x) * 4;
+                        frame[idx..idx + 4].copy_from_slice(&color);
+                    }
+                }
+            }
+        }
+    }
+}
+fn draw_activeness(frame: &mut [u8], activeness: usize){
+    let activenessdigits = {
+        let mut digitvec = Vec::new();
+
+        let mut activeness = activeness;
+        if activeness == 0 {
+            digitvec.push(0);
+        }
+        while activeness >= 10 {
+            digitvec.push((activeness % 10) as u8);
+            activeness /= 10;
+        }
+        digitvec.push(activeness as u8); // Ensure last digit is pushed
+        digitvec.reverse();
+        digitvec
+    };
+
+    let color = BLUE;
+    let x_offset = 2;
+    let y_offset = 22; // below FPS (FPS is at y=2, height=7, spacing=3)
+    let digit_spacing = 2;
+    let digit_width = 5;
+    let digit_height = 7;
+
+    for (i, &d) in activenessdigits.iter().enumerate() {
+        let font = FONT[d as usize];
+        for (row, bits) in font.iter().enumerate() {
+            for col in 0..digit_width {
+                if (bits >> (digit_width - 1 - col)) & 1 != 0 {
+                    let x = x_offset + i * (digit_width + digit_spacing) + col;
+                    let y = y_offset + row;
+                    if x < RESOLUTION.0 as usize && y < RESOLUTION.1 as usize {
+                        let idx = (y * RESOLUTION.0 as usize + x) * 4;
+                        frame[idx..idx + 4].copy_from_slice(&color);
+                    }
+                }
+            }
+        }
+    }
+}
 
 impl Game {
     
@@ -390,6 +483,10 @@ impl Game {
         cellcoord.allaround(&mut |c|{self.active.insert(c);});
     }
 
+    pub fn advancelife(&mut self){
+        self.lifetime += 1;
+    }
+
     pub fn processactives(&mut self){
 
         for coord in self.active.drain(){
@@ -422,6 +519,7 @@ impl Game {
         }
         self.nrcells.1.clear();
         self.nrcells.0.clear();
+        self.advancelife();
 
     }
 
@@ -566,7 +664,14 @@ impl Game {
                     if !paused {
                         *fadespos = max(0, *fadespos - 1);
                     }
-                    [BLUE[0], BLUE[1], BLUE[2], ((*fadespos as u8 * 10) as u8).min(255)]
+                    // randomly pick blue, green, or red
+                    match rand::random::<u8>() %2  {
+                        0 => [BLUE[0], BLUE[1], BLUE[2], ((*fadespos as u8 * 10) as u8).min(255)],
+                        1 => [GREEN[0], GREEN[1], GREEN[2], ((*fadespos as u8 * 10) as u8).min(255)],
+                        _ => [RED[0], RED[1], RED[2], ((*fadespos as u8 * 10) as u8).min(255)],
+                    }
+
+                    // [RED[0], BLUE[1], GREEN[2], ((*fadespos as u8 * 10) as u8).min(255)]
                 };
 
                 let fidx = idx * 4;
@@ -639,6 +744,9 @@ fn main() -> Result<(), Error> {
     for y in 0..RESOLUTION.1 {
         fades.push(vec![0; RESOLUTION.0 as usize]);
     }
+    let mut actives = game.active.len();
+    let mut total = game.cells.len();
+    let mut activeness = ((actives as f32 / total.max(1) as f32).powi(2) * 100.0) as usize;
 
     event_loop.run(move |event, elwt| {
         match event {
@@ -746,10 +854,18 @@ fn main() -> Result<(), Error> {
                     // game.draw(pixels.frame_mut(), paused, &mut fades);
                     game.draw_optimized(pixels.frame_mut(), paused, &mut fades);
                     if rand::random::<u8>() % 60 == 0 {
-                    game.ts.stamp("draw".to_string());
+                        game.ts.stamp("draw".to_string());
+                    }
+                    
+                    if(game.lifetime % 20 == 1){
+                        actives = game.active.len();
+                        total = game.cells.len();
+                        activeness = ((actives as f32 / total.max(1) as f32).powi(2) * 100.0) as usize;
                     }
 
                     draw_fps(pixels.frame_mut(), fps);
+                    draw_actives_len(pixels.frame_mut(), actives, total);
+                    draw_activeness(pixels.frame_mut(), activeness);
 
                     if let Err(err) = pixels.render() {
                         error!("pixels.render() failed: {err}");
