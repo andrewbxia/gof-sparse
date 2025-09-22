@@ -167,7 +167,7 @@ use std::time::Instant;
 use crate::types::{Pair, PPair, ToPack, Unpack, Stamp};
 use crate::game::{Game};
 
-pub(crate) fn start(bounds: (Pair, Pair), displayscale: f64, 
+pub(crate) fn gentlemen_synchronize_your_death_watches(bounds: (Pair, Pair), displayscale: f64, 
     zoomspeed: i32, resolution: P16) -> Result<(), Error>{
     
     let event_loop = EventLoop::new().unwrap();

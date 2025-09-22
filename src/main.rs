@@ -6,17 +6,11 @@ use pixels::Error;
 mod types;
 
 type Pair = types::Pair;
-type PPair = types::PPair;
 type P16 = types::P16;
-type Pf = types::Pf;
-use crate::types::*;
 
-
-mod game;
-use crate::game::{Game};
-
+mod game; // needs this or else display/mod.rs starts complaining??????>?>
 mod display;
-use crate::display::{draw_fps, draw_actives_len, draw_activeness, start};
+use crate::display::gentlemen_synchronize_your_death_watches;
 
 
 const RESOLUTION: P16 = (1920/2, 1080/2); // x width, y height
@@ -27,6 +21,6 @@ const ZOOMSPEED: i32 = 40;
 
 
 fn main() -> Result<(), Error> {
-    start(DEF_BOUNDS, DISPLAYSCALE, ZOOMSPEED, RESOLUTION)?;
+    gentlemen_synchronize_your_death_watches(DEF_BOUNDS, DISPLAYSCALE, ZOOMSPEED, RESOLUTION)?;
     Ok(())
 }
