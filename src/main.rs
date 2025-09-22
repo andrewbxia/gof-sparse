@@ -15,205 +15,26 @@ use std::sync::Arc;
 
 
 use wgpu::WindowHandle;
-use std::collections::{HashSet, HashMap};
-use ahash::{AHashSet, AHashMap};
 use std::io::{self, Write};
 use std::time::{Instant};
 use rand::rngs::ThreadRng;
 use rand::Rng;
-use std::cmp::{min, max};
 
-type P8 = (u8, u8);
-type P16 = (u16, u16);
-type Pf = (f32, f32);
-type Pair = (i32, i32);
-type Cell = (Pair, i32);
+mod types;
 
-type PPair = i64;
-
-trait Unpack{
-    fn unpack(&self) -> Pair;
-}
-impl Unpack for PPair{
-    fn unpack(&self) -> Pair{
-        ((self >> 32) as i32, (self & 0xffff_ffff) as u32 as i32) // u32 for signange
-    }
-}
-
-trait AddASelf{
-    fn addaself(&mut self, other: i32);
-}
-
-trait AddBSelf{
-    fn addbself(&mut self, other: i32);
-}
-
-trait AddSelf{
-    fn addself(&mut self, other: &PPair);
-}
-
-trait AddA{
-    fn adda(&self, other: i32) -> PPair;
-}
-trait AddB{
-    fn addb(&self, other: i32) -> PPair;
-}
-trait Add{
-    fn add(&self, other: PPair) -> PPair;
-}
+type Pair = types::Pair;
+type PPair = types::PPair;
+type P16 = types::P16;
+type Pf = types::Pf;
+use crate::types::*;
 
 
-impl AddSelf for PPair {
-    #[inline(always)]
-    fn addself(&mut self, other: &PPair) {
-        let a = *self;
-        let b = *other;
-        let hi = ((a >> 32) as i32).wrapping_add((b >> 32) as i32);
-        let lo = ((a as u32).wrapping_add(b as u32)) as i32;
-        *self = PPair::pack(hi, lo);
-    }
-}
+mod game;
 
-impl Add for PPair {
-    #[inline(always)]
-    fn add(&self, other: PPair) -> PPair {
-        let a = *self;
-        let b = other;
-        let hi = ((a >> 32) as i32).wrapping_add((b >> 32) as i32);
-        let lo = ((a as u32).wrapping_add(b as u32)) as i32;
-        PPair::pack(hi, lo)
-    }
-}
+use crate::game::{Game};
 
 
-trait Pack {
-    fn pack(a: i32, b: i32) -> PPair;
-}
 
-impl Pack for PPair {
-    #[inline(always)]
-    fn pack(a: i32, b: i32) -> PPair {
-        ((a as i64) << 32) | (b as u32 as i64)
-    }
-}
-
-trait ToPack{
-    fn topack(p: &Pair) -> PPair;
-}
-
-impl ToPack for PPair{
-    #[inline(always)]
-    fn topack(p: &Pair) -> PPair{
-        PPair::pack(p.0, p.1)
-    }
-}
-
-
-struct Timestamp{
-    start: Instant,
-}
-
-impl Timestamp{
-    pub fn bump(&mut self){
-        self.start = Instant::now();
-    }
-}
-trait Stamp{
-    fn stamp(&mut self, title: String);
-}
-
-impl Stamp for Timestamp{
-    fn stamp(&mut self, title: String){
-        let now = Instant::now();
-        println!("{}: {} ms", title, now.duration_since(self.start).as_millis());
-        self.start = now;
-    }
-}
-
-macro_rules! ppair {
-    
-    ($a:expr, $b:expr) => {
-        ((($a as i64) << 32) | (($b as i32 as i64) & 0xFFFF_FFFF))
-    };
-}
-
-const NEIGHBOR_OFFSETS_ALL: [PPair; 9] = [
-    ppair!(-1, -1), ppair!(0, -1), ppair!(1, -1),
-    ppair!(-1,  0), ppair!(0,  0), ppair!(1,  0),
-    ppair!(-1,  1), ppair!(0,  1), ppair!(1,  1),
-];
-
-const NEIGHBOR_OFFSETS_AROUND: [PPair; 8] = [
-    ppair!(-1, -1), ppair!(0, -1), ppair!(1, -1),
-    ppair!(-1,  0),                ppair!(1,  0),
-    ppair!(-1,  1), ppair!(0,  1), ppair!(1,  1),
-];
-
-
-trait AllAround{
-    fn allaround(&self, f: &mut dyn FnMut(PPair));
-}
-
-
-impl AllAround for PPair{
-    fn allaround(&self, f: &mut dyn FnMut(PPair)){
-
-        for offset in NEIGHBOR_OFFSETS_ALL {
-            f(self.add(offset));
-        }
-    }
-}
-
-
-trait Around {
-    fn around(&self, f: &mut dyn FnMut(PPair));
-}
-
-
-impl Around for PPair{
-    fn around(&self, f: &mut dyn FnMut(PPair)){
-
-        for offset in NEIGHBOR_OFFSETS_AROUND {
-            f(self.add(offset));
-        }
-    }
-}
-
-struct Game{
-    cells: AHashSet<PPair>,
-    active: AHashSet<PPair>, // coords of cells that needs to be updated
-    nmap: AHashMap<PPair, u8>, // map of neighbor counts for cells so don't need to query all neighbors everytime // IMPLEMENT LATER
-    bounds: (Pair, Pair), // bottom left, top right
-    lifetime: i32,
-    seed: ThreadRng,
-    ts: Timestamp,
-    frametimer: Instant,
-    nrcells: (Vec<PPair>, Vec<PPair>), // new cells remov cells
-    prevgen: i32,
-}
-
-impl Default for Game{
-    fn default() -> Self{
-        Game{
-            cells: AHashSet::new(),
-            active: AHashSet::new(),
-            nmap: AHashMap::new(),
-            bounds: ((-50, -50), (50, 50)),
-            lifetime: 0,
-            seed: rand::rng(),
-            ts: Timestamp{start: Instant::now()},
-            frametimer: Instant::now(),
-            nrcells: (Vec::new(), Vec::new()),
-            prevgen: 0,
-        }
-    }
-}
-
-
-fn clear_terminal() {
-    print!("\x1B[2J\x1B[1;1H");
-    io::stdout().flush().unwrap();
-}
 
 const FONT_SLASH: [u8; 7] = [0b00001,0b00010,0b00100,0b01000,0b10000,0b00000,0b00000];
 
@@ -357,344 +178,12 @@ fn draw_activeness(frame: &mut [u8], activeness: usize){
     }
 }
 
-impl Game {
-    
-    pub fn run(&mut self) {
-        self.insertglider();
-        return;
-        loop{
-            self.loopgame();
-            // std::thread::sleep(std::time::Duration::from_millis(75));
-            // break;
-        }
-        // placeholder
-    }
-    pub fn loopgame(&mut self) {
 
-        // runs one loop
-        self.ts.bump();
-        self.processactives();
-
-
-        let elapsed = Instant::now() - self.frametimer;
-        
-if(self.lifetime % 100 == 1){
-            // println!("spitting randommly...");
-            self.handleinput();
-        }
-        if(elapsed.as_millis() >= 200){
-        // if(true){
-            clear_terminal();
-            // self.incbounds(); 
-            self.ts.stamp("processactives".to_string());
-
-            self.display();
-            self.ts.stamp("display".to_string());
-
-            let nowgen = self.lifetime;
-            println!("gens/s, {} [{} ms]", (nowgen - self.prevgen) * 1000 / elapsed.as_millis() as i32, 
-                elapsed.as_millis() as i32 / (nowgen - self.prevgen)
-            );
-
-            self.frametimer = Instant::now();
-            self.prevgen = nowgen;
-        }
-
-        
-
-        self.lifetime += 1;
-        
-    }
-    pub fn insertglider(&mut self){
-        let points = [
-            (0, 1),
-            (1, 0),
-            (2, 0),
-            (2, 1),
-            (2, 2)
-        ];
-        for p in points{
-            self.addcell(PPair::pack(p.0, p.1));
-        }
-    }
-}
-
-impl Game {
-
-    pub fn incbounds(&mut self){
-        // return;
-        let shift_x = (self.seed.random_range(-5..=5-1), self.seed.random_range(-5..=5)+1);
-        let shift_y = (self.seed.random_range(-2..=2-1), self.seed.random_range(-2..=2)+1);
-        self.bounds.0.0 += shift_x.0;
-        self.bounds.0.1 += shift_y.0;
-        self.bounds.1.0 += shift_x.1;
-        self.bounds.1.1 += shift_y.1;
-
-
-        self.bounds.1.1 = max(self.bounds.0.1 + 10, self.bounds.1.1);
-        self.bounds.1.0 = max(self.bounds.0.0 + 10, self.bounds.1.0);
-    }
-    pub fn handleinput(&mut self){
-        // placeholder
-
-        let ((min_x, min_y), (max_x, max_y)) = self.bounds;
-        for _ in 0..4000 {
-            let x = self.seed.random_range(min_x..=max_x);
-            let y = self.seed.random_range(min_y..=max_y);
-            
-            if(x < self.bounds.0.0 || x > self.bounds.1.0 || y < self.bounds.0.1 || y > self.bounds.1.1){
-                println!("out of bounds generated ogm");
-            }
-
-            self.addcell(PPair::pack(x, y));
-        }
-
-    }
-
-    
-    pub fn debuginfo(&self) -> String{
-        format!("Cells: {}, Active: {}, Lifetime: {}, Bounds: {:?}", self.cells.len(), self.active.len(), self.lifetime, self.bounds)
-    }
-
-    pub fn addcell(&mut self, cellcoord: PPair){
-
-        if(!self.cells.insert(cellcoord)) {return;} // already live
-
-        self.activearound(&cellcoord);
-        cellcoord.around(&mut |c|{
-            *self.nmap.entry(c).or_insert(0) += 1;
-        });
-    }
-    pub fn removecell(&mut self, cellcoord: &PPair){
-
-        if(!self.cells.remove(cellcoord)) {return;} // already dead
-        self.activearound(cellcoord);
-        cellcoord.around(&mut |c|{
-            if let Some(v) = self.nmap.get_mut(&c){
-                *v -= 1;
-                if(*v <= 0){
-                    self.nmap.remove(&c);
-                }
-            }
-        })
-    }
-
-    pub fn activearound(&mut self, cellcoord: &PPair){
-        cellcoord.allaround(&mut |c|{self.active.insert(c);});
-    }
-
-    pub fn advancelife(&mut self){
-        self.lifetime += 1;
-    }
-
-    pub fn processactives(&mut self){
-
-        for coord in self.active.drain(){
-            
-            let curralive: bool = self.cells.contains(&coord);
-
-            let ncnt = *self.nmap.get(&coord).unwrap_or(&0); // can be None if active comes from removed neighbor
-            assert!(ncnt <= 8);
-
-            if(curralive){
-                if(ncnt < 2 || ncnt > 3){
-                    self.nrcells.1.push(coord);
-                }
-            }
-            else{
-                if(ncnt == 3){
-                    self.nrcells.0.push(coord);
-                }
-            }
-
-        }
-
-        let toremove = std::mem::take(&mut self.nrcells.1);
-        let toadd = std::mem::take(&mut self.nrcells.0);
-        for coord in toremove{
-            self.removecell(&coord);
-        }
-        for coord in toadd{
-            self.addcell(coord);
-        }
-        self.nrcells.1.clear();
-        self.nrcells.0.clear();
-        self.advancelife();
-
-    }
-
-    pub fn mapbs(&self, location: &Pair) -> Pair{
-        // maps location in BOUNDS to location on the screen (RESOLUTION)
-        let (distx, disty): Pair;
-        distx = (self.bounds.1.0 - self.bounds.0.0);
-        disty = (self.bounds.1.1 - self.bounds.0.1);
-
-    let (scx, scy): Pair;
-
-    scx = ((location.0 - self.bounds.0.0) * RESOLUTION.0 as i32) / distx;
-    scy = ((location.1 - self.bounds.0.1) * RESOLUTION.1 as i32) / disty;
-
-    return (scx, scy);
-    }
-    pub fn mapsb(&self, scloc: P16) -> Pair{
-        // maps screen loc to BOUNDS location
-        let (distx, disty): Pair;
-        distx = (self.bounds.1.0 - self.bounds.0.0);
-        disty = (self.bounds.1.1 - self.bounds.0.1);
-
-        let (bx, by): Pair;
-
-        bx = (scloc.0 as i32 * distx) / RESOLUTION.0 as i32 + self.bounds.0.0;
-        by = (scloc.1 as i32 * disty) / RESOLUTION.1 as i32 + self.bounds.0.1;
-
-        return (bx, by);
-    }
-
-    pub fn display(&self){
-    for y in 0..RESOLUTION.1{
-        for x in 0..RESOLUTION.0{
-            let packed = PPair::topack(&self.mapsb((x, y)));
-            if !self.cells.contains(&packed){
-                print!(".");
-            }
-            else{
-                print!("#");
-            }
-        }
-        println!();
-    }
-    println!(
-        "{}",
-        self.debuginfo()
-    );
-    println!();
-    println!();
-    }
-
-    pub fn draw(&self, frame: &mut [u8], paused: bool, fades: &mut Vec<Vec<i8>>) {
-        let mut x = 0;
-        let mut y = 0;
-        for (i, pixel) in frame.chunks_exact_mut(4).enumerate() {
-
-
-            let fadespos = &mut fades[y as usize][x as usize];
-
-            let packed = PPair::topack(&self.mapsb((x, y)));
-            let color = if self.cells.contains(&packed) {
-                *fadespos = 100 + (rand::random::<u8>() % 4) as i8;
-                WHITE
-            } else {
-                if true {//  !paused {
-                    *fadespos = max(0, *fadespos - 1);
-                }
-                // BLACK
-                
-                [BLUE[0], BLUE[1], BLUE[2], ((*fadespos as u8 * 10) as u8).min(255)]
-            };
-            x += 1;
-            if(x >= RESOLUTION.0){
-                x = 0;
-                y += 1;
-            }
-            pixel.copy_from_slice(&color);
-        }
-    }
-
-}
-impl Game {
-    /// Optimized draw: rasterize live cells to a dense screen buffer then paint.
-    pub fn draw_optimized(&mut self, frame: &mut [u8], paused: bool, fades: &mut Vec<Vec<i8>>) {
-        let resx = RESOLUTION.0 as usize;
-        let resy = RESOLUTION.1 as usize;
-        let screen_size = resx * resy;
-
-        // 1) prepare screen occupancy buffer (0 = empty, 1 = live)
-        // reuse a Vec<u8> allocated once (here we create; you can store it in Game to reuse)
-        let mut screen: Vec<bool> = vec![false; screen_size];
-
-        // precompute bounds -> scaling factors (use integer-safe mapping)
-        let (min_x, min_y) = self.bounds.0;
-        let (max_x, max_y) = self.bounds.1;
-        let distx = (max_x - min_x).max(1);
-        let disty = (max_y - min_y).max(1);
-
-
-        // Using integer arithmetic: scx = ((x - min_x) * resx) / distx
-        // rasterize each live cell once
-        for &pp in &self.cells {
-            // unpack inline
-            let wx = (pp >> 32) as i32;
-            let wy = (pp & 0xffff_ffff) as u32 as i32;
-
-            // map world -> screen (clamp)
-            let sx = (((wx - min_x) * resx as i32) / distx);
-            let sy = (((wy - min_y) * resy as i32) / disty);
-
-            let nsx = (((wx - min_x + 1) * resx as i32) / distx);
-            let nsy = (((wy - min_y + 1) * resy as i32) / disty);
-
-            if sx >= 0 && sy >= 0 && (sx as usize) < resx && (sy as usize) < resy {
-
-
-                let idx = (sy as usize) * resx + (sx as usize);
-                for y in sy..nsy{
-                    for x in sx..nsx{
-                        screen[(y as usize) * resx + (x as usize)] = true;
-                    }
-                }
-                // screen[idx] = true;
-            }
-        }
-
-        // 2) Now fill frame once using the dense screen buffer
-        // iterate in the same order you do pixel writing
-        let mut idx: usize = 0;
-        for y in 0..resy {
-            for x in 0..resx {
-                let fadespos = &mut fades[y][x];
-                let buffer_val = screen[idx]; // 0 or 1
-
-                let color: [u8;4] = if buffer_val {
-                    // live cell: set fade and color
-                    let random = rand::random::<u8>();
-                    *fadespos = 100 + ((random & (FADERANDOMNESS - 1)) as i8);
-                    WHITE
-                } else {
-                    // background: decay fade
-                    if !paused {
-                        *fadespos = max(0, *fadespos - 1);
-                    }
-                    // randomly pick blue, green, or red
-                    match rand::random::<u8>() %2  {
-                        0 => [BLUE[0], BLUE[1], BLUE[2], ((*fadespos as u8 * 10) as u8).min(255)],
-                        1 => [GREEN[0], GREEN[1], GREEN[2], ((*fadespos as u8 * 10) as u8).min(255)],
-                        _ => [RED[0], RED[1], RED[2], ((*fadespos as u8 * 10) as u8).min(255)],
-                    }
-
-                    // [RED[0], BLUE[1], GREEN[2], ((*fadespos as u8 * 10) as u8).min(255)]
-                };
-
-                let fidx = idx * 4;
-                frame[fidx..fidx+4].copy_from_slice(&color);
-                idx += 1;
-            }
-        }
-    }
-}
-
-const FADERANDOMNESSEXP: u8 = 2;
-const FADERANDOMNESS: u8 = 1 << FADERANDOMNESSEXP;
 const RESOLUTION: P16 = (1920/2, 1080/2); // x width, y height
 // const DEF_BOUNDS: (Pair, Pair) = ((-20, -5), (20, 5)); // bottom left, top right
 const DEF_BOUNDS: (Pair, Pair) = ((0, 0), (1920, 1080)); // bottom left, top right
 const DISPLAYSCALE: f64 = 2.0;
 const ZOOMSPEED: i32 = 40;
-
-const RED: [u8; 4] = [0xff, 0x00, 0x00, 0xff]; // r g b a
-const GREEN: [u8; 4] = [0x00, 0xff, 0x00, 0xff];
-const BLUE: [u8; 4] = [0x00, 0x00, 0xff, 0xff];
-const WHITE: [u8; 4] = [0xff, 0xff, 0xff, 0xff];
-const BLACK: [u8; 4] = [0x00, 0x00, 0x00, 0xff];
 
 
 fn main() -> Result<(), Error> {
@@ -765,9 +254,10 @@ fn main() -> Result<(), Error> {
                     match (state, button) {
                         (ElementState::Pressed, MouseButton::Left) => draw_state = Some(true),
                         (ElementState::Pressed, MouseButton::Right) => {
-                            game.cells.clear();
-                            game.active.clear();
-                            game.nmap.clear();
+                            // game.cells.clear();
+                            // game.active.clear();
+                            // game.nmap.clear();
+                            draw_state = Some(false);
                         },
                         (ElementState::Released, _) => draw_state = None,
                         // Mouse wheel scrolling to zoom in/out
@@ -801,21 +291,21 @@ fn main() -> Result<(), Error> {
                 }
                 WindowEvent::CursorMoved { position, .. } => {
                     if let Ok(pos) = pixels.window_pos_to_pixel(position.into()) {
-                        let coord = PPair::topack(&game.mapsb((pos.0 as u16, pos.1 as u16)));
+                        let coord = PPair::topack(&game.mapsb((pos.0 as u16, pos.1 as u16), &RESOLUTION));
                         lastcursorpos = coord.unpack();
 
                         if let Some(is_drawing) = draw_state {
-                            let coord = PPair::topack(&game.mapsb((pos.0 as u16, pos.1 as u16)));
+                            let coord = PPair::topack(&game.mapsb((pos.0 as u16, pos.1 as u16), &RESOLUTION));
                            if is_drawing {
-                            for dx in -15..=15 {
-                                for dy in -15..=15 {
-                                    if rand::random::<u8>() % 5 != 0{
-                                        continue;
-                                    }
-                                    let new_coord = PPair::pack(lastcursorpos.0 + dx, lastcursorpos.1 + dy);
-                                    game.addcell(new_coord);
-                                }
-                            }
+                            // for dx in -15..=15 {
+                            //     for dy in -15..=15 {
+                            //         if rand::random::<u8>() % 5 != 0{
+                            //             continue;
+                            //         }
+                            //         let new_coord = PPair::pack(lastcursorpos.0 + dx, lastcursorpos.1 + dy);
+                            //         game.addcell(new_coord);
+                            //     }
+                            // }
                                lastcursorpos = coord.unpack();
 
                                game.addcell(coord);
