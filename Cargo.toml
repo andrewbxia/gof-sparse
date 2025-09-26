@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 ahash = "0.8.12"
+clap = "4.5.48"
 cmp = "1.0.0"
 error-iter = "0.4.1"
 log = "0.4.28"

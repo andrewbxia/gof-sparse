@@ -1,7 +1,12 @@
 // shut up rustc i know there are unneeded parenthesis i used c++ SHDJOIAHDSFPF
-
+use clap::Parser;
 use pixels::Error;
 
+struct Args{
+    #[arg(short, long)]
+    inputfile: String,
+
+}
 
 mod types;
 

@@ -164,7 +164,7 @@ use winit::{
 use std::sync::Arc;
 
 use std::time::Instant;
-use crate::types::{Pair, PPair, ToPack, Unpack, Stamp};
+use crate::types::{Pair, PPair, ToPack, Unpack, Stamp, Pack};
 use crate::game::{Game};
 
 pub(crate) fn gentlemen_synchronize_your_death_watches(bounds: (Pair, Pair), displayscale: f64, 
@@ -280,15 +280,15 @@ pub(crate) fn gentlemen_synchronize_your_death_watches(bounds: (Pair, Pair), dis
                         if let Some(is_drawing) = draw_state {
                             let coord = PPair::topack(&game.mapsb((pos.0 as u16, pos.1 as u16), &resolution));
                            if is_drawing {
-                            // for dx in -15..=15 {
-                            //     for dy in -15..=15 {
-                            //         if rand::random::<u8>() % 5 != 0{
-                            //             continue;
-                            //         }
-                            //         let new_coord = PPair::pack(lastcursorpos.0 + dx, lastcursorpos.1 + dy);
-                            //         game.addcell(new_coord);
-                            //     }
-                            // }
+                            for dx in -15..=15 {
+                                for dy in -15..=15 {
+                                    if rand::random::<u8>() % 5 != 0{
+                                        continue;
+                                    }
+                                    let new_coord = PPair::pack(lastcursorpos.0 + dx, lastcursorpos.1 + dy);
+                                    game.addcell(new_coord);
+                                }
+                            }
                                lastcursorpos = coord.unpack();
 
                                game.addcell(coord);
