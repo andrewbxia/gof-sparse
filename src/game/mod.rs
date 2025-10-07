@@ -361,13 +361,13 @@ impl Game {
                         *fadespos = max(0, *fadespos - 1);
                     }
                     // randomly pick blue, green, or red
-                    match rand::random::<u8>() % 3  {
-                        0 => [BLUE[0], BLUE[1], BLUE[2], ((*fadespos as u8 * 10) as u8).min(255)],
-                        1 => [GREEN[0], GREEN[1], GREEN[2], ((*fadespos as u8 * 10) as u8).min(255)],
-                        _ => [RED[0], RED[1], RED[2], ((*fadespos as u8 * 10) as u8).min(255)],
-                    }
+                    // match rand::random::<u8>() % 3  {
+                    //     0 => [BLUE[0], BLUE[1], BLUE[2], ((*fadespos as u8 * 10) as u8).min(255)],
+                    //     1 => [GREEN[0], GREEN[1], GREEN[2], ((*fadespos as u8 * 10) as u8).min(255)],
+                    //     _ => [RED[0], RED[1], RED[2], ((*fadespos as u8 * 10) as u8).min(255)],
+                    // }
 
-                    // [RED[0], RED[1], RED[2], ((*fadespos as u8 * 10) as u8).min(255)]
+                    [RED[0], RED[1], RED[2], ((*fadespos as u8 * 10) as u8).min(255)]
                 };
 
                 let fidx = idx * 4;
