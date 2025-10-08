@@ -2,7 +2,7 @@ pub const FONT_SLASH: [u8; 7] = [0b00001,0b00010,0b00100,0b01000,0b10000,0b00000
 
 pub const LETTER_SIZE_X: u16 = 3;
 pub const LETTER_SIZE_Y: u16 = 4;
-pub const LETTER_SCALE: u16 =  25;
+pub const LETTER_SCALE: u16 =  15;
 pub const LINE_SPACING: u16 =     2 * LETTER_SCALE;
 pub const LETTER_SPACING: u16 =   1 * LETTER_SCALE;
 pub const WINDOW_PADDING_X: u16 = 10 * LETTER_SCALE;
@@ -23,7 +23,7 @@ pub const FONT: [[u8; 7]; 11] = [
     FONT_SLASH // /
 ];
 
-pub const FONT_LETTERS: [[[i8; 3]; 4]; 32] = [
+pub const FONT_LETTERS: [[[i8; 3]; 4]; 33] = [
     [
         [0, 1, 0],
         [1, 0, 1],
@@ -191,6 +191,12 @@ pub const FONT_LETTERS: [[[i8; 3]; 4]; 32] = [
         [0, 1, 0],
         [0, 0, 0],
         [0, 0, 0], // apostrophe
+    ],
+    [
+        [-1, -1, -1],
+        [-1, -1, -1],
+        [-1, -1, -1],
+        [-1, -1, -1], // backspace
     ],
 ];
 /*

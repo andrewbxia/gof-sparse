@@ -175,6 +175,7 @@ fn draw_letter(game: &mut Game, lettr: char, currlettercnt: u16, resolution: &P1
         '!' => 29,
         '?' => 30,
         '\'' => 31,
+        '\x08' => 32, // backspace
         _ => {
             println!("unsupported char: {}", lettr);
             return false;
@@ -184,7 +185,7 @@ fn draw_letter(game: &mut Game, lettr: char, currlettercnt: u16, resolution: &P1
 
     for (dy, row) in FONT_LETTERS[idx as usize].iter().enumerate() {
         for (dx, &pixel) in row.iter().enumerate() {
-            if(pixel != 1){continue;}
+            if(pixel == 0){continue;}
 
             let nx1 = posx + (dx as u16 * LETTER_SCALE);
             let ny1 = posy + (dy as u16 * LETTER_SCALE);
@@ -194,7 +195,11 @@ fn draw_letter(game: &mut Game, lettr: char, currlettercnt: u16, resolution: &P1
 
             for gx in gpos1.0.min(gpos2.0)..gpos1.0.max(gpos2.0) {
                 for gy in gpos1.1.min(gpos2.1)..gpos1.1.max(gpos2.1) {
-                    let gcoord = PPair::pack(gx, gy) ;
+                    let gcoord = PPair::pack(gx, gy);
+                    if(pixel == -1){
+                        game.removecell(&gcoord);
+                        continue;
+                    }
                     game.addcell(gcoord);
                 }
             }
@@ -255,6 +260,9 @@ pub(crate) fn gentlemen_synchronize_your_death_watches(game: &mut Game, displays
     let mut activeness = ((actives as f32 / total.max(1) as f32).powi(2) * 100.0) as usize;
     let mut currentlettercount = 0;
 
+    let mut addtasks: Vec<(PPair, i32)> = Vec::new();
+    let mut removetasks: Vec<(PPair, i32)> = Vec::new();
+
     event_loop.run(move |event, elwt| {
         match event {
             Event::WindowEvent { event, .. } => match event {
@@ -286,12 +294,22 @@ pub(crate) fn gentlemen_synchronize_your_death_watches(game: &mut Game, displays
                                         currentlettercount += 1;
                                     }
                                 }
+                                
+                                let mut c: char = '\0';
                                 if let Key::Named(NamedKey::Space) = &event.logical_key {
-                                    let c = ' ';
+                                    c = ' ';
                                     // paused = true;
                                     println!("Typed character: {}", c);
                                     draw_letter(game, c, currentlettercount, &resolution);
                                     currentlettercount += 1;
+                                }
+                                if let Key::Named(NamedKey::Backspace) = &event.logical_key {
+                                    c = '\x08';
+                                    if currentlettercount > 0 {
+                                        currentlettercount -= 1;
+                                    }
+                                    draw_letter(game, c, currentlettercount, &resolution);
+                                    println!("Typed character: backspace");
                                 }
                             }
                         }
@@ -367,7 +385,7 @@ pub(crate) fn gentlemen_synchronize_your_death_watches(game: &mut Game, displays
                 WindowEvent::RedrawRequested => {
                     game.ts.bump();
                     if !paused {
-                        game.processactives();
+                        game.processactives_old();
                     }
                     if(rand::random::<u8>() % 60 == 0) {
                         let duration = game.ts.stamp("processactives".to_string());
