@@ -1,5 +1,5 @@
 use crate::types::{Pair, PPair, ToPack, 
-    Pack, Timestamp, Stamp, Around, AllAround,
+    Pack, Timestamp, Stamp, Around, AllAround, NEIGHBOR_OFFSETS_AROUND,Add,
     P16, RED, GREEN, BLUE, WHITE, BLACK};
 
 
@@ -12,6 +12,8 @@ use std::time::Instant;
 use rand::Rng;
 use rand::rngs::ThreadRng;
 use std::io::{self, Write};
+use rayon::prelude::*;
+use dashmap::DashMap;
 
 use std::collections::{HashSet, HashMap};
 use ahash::{AHashSet, AHashMap};
@@ -54,16 +56,7 @@ impl Default for Game{
 
 impl Game {
     
-    pub fn run(&mut self, resolution: &P16) {
-        self.insertglider();
-        return;
-        loop{
-            self.loopgame(resolution);
-            // std::thread::sleep(std::time::Duration::from_millis(75));
-            // break;
-        }
-        // placeholder
-    }
+   
     pub fn loopgame(&mut self, resolution: &P16) {
 
         // runs one loop
@@ -175,6 +168,7 @@ impl Game {
         });
     }
 
+
     pub fn activearound(&mut self, cellcoord: &PPair){
         cellcoord.allaround(&mut |c|{self.active.insert(c);});
     }
@@ -182,8 +176,7 @@ impl Game {
     pub fn advancelife(&mut self){
         self.lifetime += 1;
     }
-
-    pub fn processactives(&mut self){
+    pub fn processactives_old(&mut self){
 
         for coord in self.active.drain(){
             
@@ -213,6 +206,71 @@ impl Game {
         for coord in toadd{
             self.addcell(coord);
         }
+        self.nrcells.1.clear();
+        self.nrcells.0.clear();
+        self.advancelife();
+
+    }
+
+    pub fn processactives(&mut self){
+
+        for coord in self.active.drain(){
+            
+            let curralive: bool = self.cells.contains(&coord);
+
+            let ncnt = *self.nmap.get(&coord).unwrap_or(&0); // can be None if active comes from removed neighbor
+            assert!(ncnt <= 8);
+
+            if(curralive){
+                if(ncnt < 2 || ncnt > 3){
+                    self.nrcells.1.push(coord);
+                }
+            }
+            else{
+                if(ncnt == 3){
+                    self.nrcells.0.push(coord);
+                }
+            }
+        }
+
+        let toremove = std::mem::take(&mut self.nrcells.1);
+        let toadd = std::mem::take(&mut self.nrcells.0);
+        let mut deltas: AHashMap<PPair, i8> = AHashMap::new();
+        deltas.reserve((toremove.len() + toadd.len()) << 3);
+        
+        // calculate adding and removing deltas
+
+        for coord in toremove.iter(){
+            self.cells.remove(coord);
+            self.active.insert(*coord);
+            for offset in NEIGHBOR_OFFSETS_AROUND {
+                let nb = coord.add(offset);
+                let entry = deltas.entry(nb).or_insert(0);
+                *entry -= 1;
+            }
+        }
+        for coord in toadd.iter(){
+            self.active.insert(*coord);
+            self.cells.insert(*coord);
+            for offset in NEIGHBOR_OFFSETS_AROUND {
+                let nb = coord.add(offset);
+                let entry = deltas.entry(nb).or_insert(0);
+                *entry += 1;
+            }
+        }
+
+        deltas.drain().for_each(|entry|{
+            self.active.insert(entry.0);
+            if(entry.1 == 0){
+                return;
+            }
+            let v = self.nmap.entry(entry.0).or_insert(0);
+            *v = (*v as i8 + entry.1) as u8; // clamp at 8 (no point > 8)
+            if *v == 0 {
+                self.nmap.remove(&entry.0);
+            }
+        });
+
         self.nrcells.1.clear();
         self.nrcells.0.clear();
         self.advancelife();
@@ -357,7 +415,8 @@ impl Game {
                     WHITE
                 } else {
                     // background: decay fade
-                    if !paused {
+                    // if !paused {
+                    if true{
                         *fadespos = max(0, *fadespos - 1);
                     }
                     // randomly pick blue, green, or red

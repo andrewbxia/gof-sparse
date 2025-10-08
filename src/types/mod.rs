@@ -1,4 +1,4 @@
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 
 pub(crate) const RED: [u8; 4] = [0xff, 0x00, 0x00, 0xff]; // r g b a
@@ -104,13 +104,13 @@ macro_rules! ppair {
     };
 }
 
-const NEIGHBOR_OFFSETS_ALL: [PPair; 9] = [
+pub const NEIGHBOR_OFFSETS_ALL: [PPair; 9] = [
     ppair!(-1, -1), ppair!(0, -1), ppair!(1, -1),
     ppair!(-1,  0), ppair!(0,  0), ppair!(1,  0),
     ppair!(-1,  1), ppair!(0,  1), ppair!(1,  1),
 ];
 
-const NEIGHBOR_OFFSETS_AROUND: [PPair; 8] = [
+pub const NEIGHBOR_OFFSETS_AROUND: [PPair; 8] = [
     ppair!(-1, -1), ppair!(0, -1), ppair!(1, -1),
     ppair!(-1,  0),                ppair!(1,  0),
     ppair!(-1,  1), ppair!(0,  1), ppair!(1,  1),
@@ -152,13 +152,15 @@ impl Timestamp{
     }
 }
 pub(crate) trait Stamp{
-    fn stamp(&mut self, title: String);
+    fn stamp(&mut self, title: String) -> Duration;
 }
 
 impl Stamp for Timestamp{
-    fn stamp(&mut self, title: String){
+    fn stamp(&mut self, title: String) -> Duration{
         let now = Instant::now();
         println!("{}: {} ms", title, now.duration_since(self.start).as_millis());
+        let duration = now.duration_since(self.start);
         self.start = now;
+        duration
     }
 }

@@ -1,5 +1,14 @@
 pub const FONT_SLASH: [u8; 7] = [0b00001,0b00010,0b00100,0b01000,0b10000,0b00000,0b00000];
 
+pub const LETTER_SIZE_X: u16 = 3;
+pub const LETTER_SIZE_Y: u16 = 4;
+pub const LETTER_SCALE: u16 =  25;
+pub const LINE_SPACING: u16 =     2 * LETTER_SCALE;
+pub const LETTER_SPACING: u16 =   1 * LETTER_SCALE;
+pub const WINDOW_PADDING_X: u16 = 10 * LETTER_SCALE;
+pub const WINDOW_PADDING_Y: u16 = 10 * LETTER_SCALE;
+
+
 pub const FONT: [[u8; 7]; 11] = [
     [0b01110,0b10001,0b10011,0b10101,0b11001,0b10001,0b01110], // 0
     [0b00100,0b01100,0b00100,0b00100,0b00100,0b00100,0b01110], // 1
@@ -14,7 +23,7 @@ pub const FONT: [[u8; 7]; 11] = [
     FONT_SLASH // /
 ];
 
-pub const FONT_LETTERS: [[[i8; 3]; 4]; 27] = [
+pub const FONT_LETTERS: [[[i8; 3]; 4]; 32] = [
     [
         [0, 1, 0],
         [1, 0, 1],
@@ -146,19 +155,53 @@ pub const FONT_LETTERS: [[[i8; 3]; 4]; 27] = [
         [1, 1, 0],
         [1, 1, 1],
     ],
+    // exiting alphabet, idx 26 vvv
     [
         [0, 0, 0],
         [0, 0, 0],
         [0, 0, 0],
         [0, 0, 0], // space
-    ]
+    ],
+    [
+        [0, 0, 0],
+        [0, 0, 0],
+        [0, 0, 0],
+        [0, 1, 0], // period
+    ],
+    [
+        [0, 0, 0],
+        [0, 0, 0],
+        [0, 1, 0],
+        [0, 1, 0], // comma
+    ],
+    [
+        [1, 1, 1],
+        [0, 1, 0],
+        [0, 0, 0],
+        [0, 1, 0], // exclamation mark
+    ],
+    [
+        [1, 1, 0],
+        [0, 0, 1],
+        [0, 0, 0],
+        [0, 1, 0], // question mark
+    ],
+    [
+        [0, 1, 0],
+        [0, 1, 0],
+        [0, 0, 0],
+        [0, 0, 0], // apostrophe
+    ],
 ];
+/*
 
-pub const LETTER_SIZE_X: i8 = 3;
-pub const LETTER_SIZE_Y: i8 = 4;
-pub const LETTER_SPACING: i8 = 1;
-pub const LINE_SPACING: i8 = 2;
-pub const LETTER_SCALE: i8 = 5;
-pub const WINDOW_PADDING_X: i8 = 1;
-pub const WINDOW_PADDING_Y: i8 = 1;
+[
+        [0, 0, 0],
+        [0, 0, 0],
+        [0, 0, 0],
+        [0, 0, 0], // 
+    ],
 
+
+
+*/

@@ -154,41 +154,55 @@ use crate::game::{Game};
 
 use font::*;
 
-fn draw_letter(game: &mut Game, lettr: char, currlettercnt: i8, bounds: (Pair, Pair)){
-    let lenx = WINDOW_PADDING_X + (LETTER_SIZE_X + LETTER_SPACING) * currlettercnt;
-    let timeswrapped = lenx / (bounds.1.0 - bounds.0.0) as i8;
-    let posy = WINDOW_PADDING_Y as i32 + (LETTER_SIZE_Y + LINE_SPACING) as i32 * timeswrapped as i32 + bounds.0.1;
-    let posx = lenx as i32 % (bounds.1.0 - bounds.0.0) + bounds.0.0;
+fn draw_letter(game: &mut Game, lettr: char, currlettercnt: u16, resolution: &P16) -> bool{
+    let realresolution: P16 = (resolution.0 - 2 * WINDOW_PADDING_X, resolution.1 - 2 * WINDOW_PADDING_Y);
+    let lenx = (LETTER_SIZE_X + LETTER_SPACING) * currlettercnt * LETTER_SIZE_X; // numpixels of letters
+    let timeswrapped = lenx / (realresolution.0);
+    let posy = WINDOW_PADDING_Y + (LETTER_SIZE_Y * LETTER_SCALE + LINE_SPACING) * timeswrapped;
 
-    let mut idx: i8 = 0;
-    // letter is already lowercase
-    if lettr == ' ' {
-        idx = 26;
+    if(posy > resolution.1 - WINDOW_PADDING_Y - LETTER_SIZE_Y){
+        println!("out of vertical space for letters: {}", posy);
+        return false;
     }
-    else if lettr >= 'a' && lettr <= 'z' {
-        idx = (lettr as u8 - 'a' as u8) as i8;
-    } else {
-        println!("Unsupported character: {}", lettr);
-        return;
-    }
+
+    let posx = lenx % (realresolution.0) + WINDOW_PADDING_X;
+
+    let idx: i8 = match lettr {
+        'a'..='z' => (lettr as u8 - b'a') as i8,
+        ' ' => 26,
+        '.' => 27,
+        ',' => 28,
+        '!' => 29,
+        '?' => 30,
+        '\'' => 31,
+        _ => {
+            println!("unsupported char: {}", lettr);
+            return false;
+        }
+    };
 
 
     for (dy, row) in FONT_LETTERS[idx as usize].iter().enumerate() {
         for (dx, &pixel) in row.iter().enumerate() {
-            if pixel == 1 {
-                let drawx = posx + (dx * LETTER_SIZE_X as usize) as i32;
-                let drawy = posy + (dy * LETTER_SIZE_Y as usize) as i32;
-                for sx in 0..LETTER_SCALE {
-                    for sy in 0..LETTER_SCALE {
-                        game.addcell(PPair::pack(drawx + sx as i32, drawy + sy as i32));
-                    }
+            if(pixel != 1){continue;}
+
+            let nx1 = posx + (dx as u16 * LETTER_SCALE);
+            let ny1 = posy + (dy as u16 * LETTER_SCALE);
+
+            let gpos1 = game.mapsb((nx1, ny1), &resolution);
+            let gpos2 = game.mapsb((nx1 + (LETTER_SCALE), ny1 + (LETTER_SCALE)), &resolution);
+
+            for gx in gpos1.0.min(gpos2.0)..gpos1.0.max(gpos2.0) {
+                for gy in gpos1.1.min(gpos2.1)..gpos1.1.max(gpos2.1) {
+                    let gcoord = PPair::pack(gx, gy) ;
+                    game.addcell(gcoord);
                 }
             }
         }
     }
 
 
-
+    return true;
 
 }
 
@@ -249,20 +263,34 @@ pub(crate) fn gentlemen_synchronize_your_death_watches(game: &mut Game, displays
                 }
                 WindowEvent::KeyboardInput { event, .. } => {
                     if event.state == ElementState::Pressed {
-                        if let Key::Named(NamedKey::Space) = event.logical_key {
+                        if let Key::Named(NamedKey::Enter) = event.logical_key {
                              paused = !paused;
                              if(paused == false){
                                 currentlettercount = 0;
                              }
                         }
-                        if let Key::Character(ch) = &event.logical_key {
-                            let ch = ch.to_ascii_lowercase();
-                            paused = true;
-                            println!("Typed character: {}", ch);
-                            if ch.len() == 1 {
-                                let c = ch.chars().next().unwrap();
-                                if c >= 'a' && c <= 'z' || c == ' ' {
-                                    draw_letter(game, c, currentlettercount, game.bounds);
+                        if let Key::Named(NamedKey::Escape) = event.logical_key {
+                            currentlettercount = 0;
+                            game.cells.clear();
+                            game.active.clear();
+                            game.nmap.clear();
+
+                        }
+                        match &event.logical_key {
+                            _ => {
+                                if let Key::Character(s) = &event.logical_key {
+                                    let ch = s.to_ascii_lowercase();
+                                    if ch.len() == 1 {
+                                        let c = ch.chars().next().unwrap();
+                                        draw_letter(game, c, currentlettercount, &resolution);
+                                        currentlettercount += 1;
+                                    }
+                                }
+                                if let Key::Named(NamedKey::Space) = &event.logical_key {
+                                    let c = ' ';
+                                    // paused = true;
+                                    println!("Typed character: {}", c);
+                                    draw_letter(game, c, currentlettercount, &resolution);
                                     currentlettercount += 1;
                                 }
                             }
@@ -306,6 +334,7 @@ pub(crate) fn gentlemen_synchronize_your_death_watches(game: &mut Game, displays
 
 
                     targetbounds = ((new_min_x, new_min_y), (new_max_x.max(new_min_x + 20), new_max_y.max(new_min_y + 11)));
+                    currentlettercount = 0;
                     // game.bounds
                 }
                 WindowEvent::CursorMoved { position, .. } => {
@@ -341,8 +370,9 @@ pub(crate) fn gentlemen_synchronize_your_death_watches(game: &mut Game, displays
                         game.processactives();
                     }
                     if(rand::random::<u8>() % 60 == 0) {
-                        game.ts.stamp("processactives".to_string());
+                        let duration = game.ts.stamp("processactives".to_string());
                         println!("Active cells: {}", game.active.len());
+                        println!("active cells per ms: {}", game.active.len() as f64 / duration.as_millis().max(1) as f64);
                         println!("cells: {}", game.cells.len());
 
                     }
@@ -366,10 +396,15 @@ pub(crate) fn gentlemen_synchronize_your_death_watches(game: &mut Game, displays
                         game.ts.stamp("draw".to_string());
                     }
                     
-                    if(game.lifetime % 20 == 1){
+                    if(rand::random::<u8>() % 20 == 0) {
                         actives = game.active.len();
                         total = game.cells.len();
                         activeness = ((actives as f32 / total.max(1) as f32).powi(2) * 100.0) as usize;
+                        /*
+                        activeness: < 300: stable
+                        301 - 600
+                        >900: fresh idk
+                         */
                     }
 
                     draw_fps(pixels.frame_mut(), fps, &resolution);
