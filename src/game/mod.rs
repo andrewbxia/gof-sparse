@@ -13,11 +13,11 @@ use rand::Rng;
 use rand::rngs::ThreadRng;
 use std::io::{self, Write};
 use rayon::prelude::*;
-use dashmap::DashMap;
+use std::collections::BinaryHeap;
 
-use std::collections::{HashSet, HashMap};
+use std::collections::{HashMap, HashSet, VecDeque};
 use ahash::{AHashSet, AHashMap};
-use std::cmp::{min, max};
+use std::cmp::{max, min, Reverse};
 
 
 fn clear_terminal() {
@@ -29,12 +29,13 @@ pub(crate) struct Game{
     pub(crate) active: AHashSet<PPair>, // coords of cells that needs to be updated
     pub(crate) nmap: AHashMap<PPair, u8>, // map of neighbor counts for cells so don't need to query all neighbors everytime // IMPLEMENT LATER
     pub(crate) bounds: (Pair, Pair), // bottom left, top right
-    pub(crate) lifetime: i32,
+    pub(crate) lifetime: u32,
     pub(crate) ts: Timestamp,
     pub(crate) seed: ThreadRng,
     pub(crate) frametimer: Instant,
     pub(crate) nrcells: (Vec<PPair>, Vec<PPair>), // new cells remov cells
-    pub(crate) prevgen: i32,
+    pub(crate) prevgen: u32,
+    pub(crate) start: Instant,
 }
 
 impl Default for Game{
@@ -50,6 +51,7 @@ impl Default for Game{
             frametimer: Instant::now(),
             nrcells: (Vec::new(), Vec::new()),
             prevgen: 0,
+            start: Instant::now(),
         }
     }
 }
@@ -80,8 +82,8 @@ impl Game {
             self.ts.stamp("display".to_string());
 
             let nowgen = self.lifetime;
-            println!("gens/s, {} [{} ms]", (nowgen - self.prevgen) * 1000 / elapsed.as_millis() as i32, 
-                elapsed.as_millis() as i32 / (nowgen - self.prevgen)
+            println!("gens/s, {} [{} ms]", (nowgen - self.prevgen) * 1000 / elapsed.as_millis() as u32, 
+                elapsed.as_millis() as u32 / (nowgen - self.prevgen)
             );
 
             self.frametimer = Instant::now();
@@ -362,25 +364,18 @@ impl Game {
         let resy = RESOLUTION.1 as usize;
         let screen_size = resx * resy;
 
-        // 1) prepare screen occupancy buffer (0 = empty, 1 = live)
-        // reuse a Vec<u8> allocated once (here we create; you can store it in Game to reuse)
         let mut screen: Vec<bool> = vec![false; screen_size];
 
-        // precompute bounds -> scaling factors (use integer-safe mapping)
         let (min_x, min_y) = self.bounds.0;
         let (max_x, max_y) = self.bounds.1;
         let distx = (max_x - min_x).max(1);
         let disty = (max_y - min_y).max(1);
 
 
-        // Using integer arithmetic: scx = ((x - min_x) * resx) / distx
-        // rasterize each live cell once
         for &pp in &self.cells {
-            // unpack inline
             let wx = (pp >> 32) as i32;
             let wy = (pp & 0xffff_ffff) as u32 as i32;
 
-            // map world -> screen (clamp)
             let sx = (((wx - min_x) * resx as i32) / distx);
             let sy = (((wy - min_y) * resy as i32) / disty);
 
@@ -411,7 +406,7 @@ impl Game {
                 let color: [u8;4] = if buffer_val {
                     // live cell: set fade and color
                     let random = rand::random::<u8>();
-                    *fadespos = 100 + ((random & (FADERANDOMNESS - 1)) as i8);
+                    *fadespos = 35 + ((random & (FADERANDOMNESS - 1)) as i8);
                     WHITE
                 } else {
                     // background: decay fade
@@ -426,13 +421,32 @@ impl Game {
                     //     _ => [RED[0], RED[1], RED[2], ((*fadespos as u8 * 10) as u8).min(255)],
                     // }
 
-                    [RED[0], RED[1], RED[2], ((*fadespos as u8 * 10) as u8).min(255)]
+                    [BLUE[0], BLUE[1], BLUE[2], ((*fadespos as u8 * 10) as u8).min(255)]
                 };
 
                 let fidx = idx * 4;
                 frame[fidx..fidx+4].copy_from_slice(&color);
                 idx += 1;
             }
+        }
+    }
+    pub fn elapsedmillis(&self) -> u128{
+        return self.start.elapsed().as_millis();
+    }
+    pub fn processtasks(&mut self, toadd: &mut BinaryHeap<Reverse<(u128, PPair)>>, 
+        toremove: &mut BinaryHeap<Reverse<(u128, PPair)>>){
+        // process a list of tasks to add or remove cells at specific generations
+        let now = self.start.elapsed().as_millis();
+        if(!toadd.is_empty()){
+            // println!("{}, {}", toadd.front().unwrap().1, now);
+        }
+        while(!toadd.is_empty() && toadd.peek().unwrap().0.0 <= now){
+            self.addcell(toadd.peek().unwrap().0.1);
+            toadd.pop();
+        }
+        while(!toremove.is_empty() && toremove.peek().unwrap().0.0 <= now){
+            self.removecell(&toremove.peek().unwrap().0.1);
+            toremove.pop();
         }
     }
 }

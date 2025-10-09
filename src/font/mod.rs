@@ -2,12 +2,13 @@ pub const FONT_SLASH: [u8; 7] = [0b00001,0b00010,0b00100,0b01000,0b10000,0b00000
 
 pub const LETTER_SIZE_X: u16 = 3;
 pub const LETTER_SIZE_Y: u16 = 4;
-pub const LETTER_SCALE: u16 =  15;
+pub const LETTER_SCALE: u16 =  30;
 pub const LINE_SPACING: u16 =     2 * LETTER_SCALE;
 pub const LETTER_SPACING: u16 =   1 * LETTER_SCALE;
-pub const WINDOW_PADDING_X: u16 = 10 * LETTER_SCALE;
-pub const WINDOW_PADDING_Y: u16 = 10 * LETTER_SCALE;
-
+pub const WINDOW_PADDING_X: u16 = 50;
+pub const WINDOW_PADDING_Y: u16 = 50;
+pub const DRAW_SPEED: u16 = 2; // lower faster
+pub const BORDER_WIDTH: u16 = 1;
 
 pub const FONT: [[u8; 7]; 11] = [
     [0b01110,0b10001,0b10011,0b10101,0b11001,0b10001,0b01110], // 0

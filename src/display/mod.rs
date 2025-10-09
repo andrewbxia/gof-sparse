@@ -144,7 +144,9 @@ use winit::{
     keyboard::{Key, NamedKey},
     window::{WindowAttributes, Window},
 };
-
+use std::collections::BinaryHeap;
+use std::collections::VecDeque;
+use std::cmp::Reverse;
 use std::sync::Arc;
 
 use std::thread::current;
@@ -193,8 +195,8 @@ fn draw_letter(game: &mut Game, lettr: char, currlettercnt: u16, resolution: &P1
             let gpos1 = game.mapsb((nx1, ny1), &resolution);
             let gpos2 = game.mapsb((nx1 + (LETTER_SCALE), ny1 + (LETTER_SCALE)), &resolution);
 
-            for gx in gpos1.0.min(gpos2.0)..gpos1.0.max(gpos2.0) {
-                for gy in gpos1.1.min(gpos2.1)..gpos1.1.max(gpos2.1) {
+            for gx in gpos1.0..gpos2.0{
+                for gy in gpos1.1..gpos2.1{
                     let gcoord = PPair::pack(gx, gy);
                     if(pixel == -1){
                         game.removecell(&gcoord);
@@ -209,6 +211,125 @@ fn draw_letter(game: &mut Game, lettr: char, currlettercnt: u16, resolution: &P1
 
     return true;
 
+}
+
+fn draw_letter_staggered(game: &Game, lettr: char, 
+    currlettercnt: u16, resolution: &P16, 
+    toadd: &mut BinaryHeap<Reverse<(u128, PPair)>>, toremove: &mut BinaryHeap<Reverse<(u128, PPair)>>) -> bool{
+    
+    let realresolution: P16 = (resolution.0 - 2 * WINDOW_PADDING_X, resolution.1 - 2 * WINDOW_PADDING_Y);
+    let lenx = (LETTER_SIZE_X + LETTER_SPACING) * currlettercnt * LETTER_SIZE_X; // numpixels of letters
+    let timeswrapped = lenx / (realresolution.0);
+    let posy = WINDOW_PADDING_Y + (LETTER_SIZE_Y * LETTER_SCALE + LINE_SPACING) * timeswrapped;
+
+    if(posy > resolution.1 - WINDOW_PADDING_Y - LETTER_SIZE_Y){
+        println!("out of vertical space for letters: {}", posy);
+        return false;
+    }
+
+    let posx = lenx % (realresolution.0) + WINDOW_PADDING_X;
+
+    let idx: i8 = match lettr {
+        'a'..='z' => (lettr as u8 - b'a') as i8,
+        ' ' => 26,
+        '.' => 27,
+        ',' => 28,
+        '!' => 29,
+        '?' => 30,
+        '\'' => 31,
+        '\x08' => 32, // backspace
+        _ => {
+            println!("unsupported char: {}", lettr);
+            return false;
+        }
+    };
+
+    let now = game.elapsedmillis();
+
+    for (dy, row) in FONT_LETTERS[idx as usize].iter().enumerate() {
+        for (dx, &pixel) in row.iter().enumerate() {
+            if(pixel == 0){continue;}
+
+            let nx1 = posx + (dx as u16 * LETTER_SCALE);
+            let ny1 = posy + (dy as u16 * LETTER_SCALE);
+
+            let gpos1 = game.mapsb((nx1, ny1), &resolution);
+            let gpos2 = game.mapsb((nx1 + (LETTER_SCALE), ny1 + (LETTER_SCALE)), &resolution);
+
+            let dimension = (gpos2.0 - gpos1.0) as u16;
+
+            for gx in gpos1.0..gpos2.0{
+                let pxl_xdiff = (gx - gpos1.0) as u16;
+                let ltr_xdiff = dx as u16 * dimension;
+                for gy in gpos1.1..gpos2.1{
+                    let gcoord = PPair::pack(gx, gy);
+                    let pxl_ydiff = (gy - gpos1.1) as u16;
+                    let ltr_ydiff = dy as u16 * dimension;
+
+
+
+
+                    let left_edge = (pxl_xdiff < BORDER_WIDTH);
+                    let right_edge = (pxl_xdiff >= dimension - BORDER_WIDTH);
+                    let top_edge = (pxl_ydiff < BORDER_WIDTH);
+                    let bottom_edge = (pxl_ydiff >= dimension - BORDER_WIDTH);
+
+                    // Test for edge: check if there is a pixel in FONT_LETTERS next to the corresponding edge
+                    let mut isedge = left_edge || right_edge || top_edge || bottom_edge;
+                    // Left edge: check if there's a pixel to the left
+                    if left_edge && dx > 0 && FONT_LETTERS[idx as usize][dy][dx - 1] != 0 {
+                        isedge = false;
+                    }
+                    // Right edge: check if there's a pixel to the right
+                    if right_edge && dx + 1 < FONT_LETTERS[idx as usize][dy].len() && FONT_LETTERS[idx as usize][dy][dx + 1] != 0 {
+                        isedge = false;
+                    }
+                    // Top edge: check if there's a pixel above
+                    if top_edge && dy > 0 && FONT_LETTERS[idx as usize][dy - 1][dx] != 0 {
+                        isedge = false;
+                    }
+                    // Bottom edge: check if there's a pixel below
+                    if bottom_edge && dy + 1 < FONT_LETTERS[idx as usize].len() && FONT_LETTERS[idx as usize][dy + 1][dx] != 0 {
+                        isedge = false;
+                    }
+
+                    let mut xdiff = pxl_xdiff + ltr_xdiff;
+                    let mut ydiff = pxl_ydiff + ltr_ydiff;
+
+                    // xdiff = xdiff.pow(2)/4;
+                    // ydiff = ydiff.pow(2)/4;
+                    xdiff = ((xdiff as f32) * (xdiff as f32).log2()).round() as u16;
+                    ydiff = ((ydiff as f32) * (ydiff as f32).log2()).round() as u16;
+
+                    let mut score = xdiff * DRAW_SPEED
+                        + ydiff * DRAW_SPEED;
+
+                    let modexp = 3;
+                    if(!isedge){
+                        // score += dimension;
+
+                        if(score % (2 << modexp) >= (1 << modexp)){
+                            score *= 2;
+                        }
+                    }
+                    else{
+                        score /= 8;
+                    }
+
+                    let t = now + score as u128;
+
+
+                    if(pixel == -1){
+                        toremove.push(Reverse((t, gcoord)));
+                        continue;
+                    }
+                    toadd.push(Reverse((t, gcoord)));
+                }
+            }
+        }
+    }
+
+    return true;
 }
 
 pub(crate) fn gentlemen_synchronize_your_death_watches(game: &mut Game, displayscale: f64, 
@@ -260,8 +381,8 @@ pub(crate) fn gentlemen_synchronize_your_death_watches(game: &mut Game, displays
     let mut activeness = ((actives as f32 / total.max(1) as f32).powi(2) * 100.0) as usize;
     let mut currentlettercount = 0;
 
-    let mut addtasks: Vec<(PPair, i32)> = Vec::new();
-    let mut removetasks: Vec<(PPair, i32)> = Vec::new();
+    let mut addtasks: BinaryHeap<Reverse<(u128, PPair)>> = BinaryHeap::new();
+    let mut removetasks: BinaryHeap<Reverse<(u128, PPair)>> = BinaryHeap::new();
 
     event_loop.run(move |event, elwt| {
         match event {
@@ -282,6 +403,8 @@ pub(crate) fn gentlemen_synchronize_your_death_watches(game: &mut Game, displays
                             game.cells.clear();
                             game.active.clear();
                             game.nmap.clear();
+                            addtasks.clear();
+                            removetasks.clear();
 
                         }
                         match &event.logical_key {
@@ -290,7 +413,10 @@ pub(crate) fn gentlemen_synchronize_your_death_watches(game: &mut Game, displays
                                     let ch = s.to_ascii_lowercase();
                                     if ch.len() == 1 {
                                         let c = ch.chars().next().unwrap();
-                                        draw_letter(game, c, currentlettercount, &resolution);
+                                        // draw_letter(game, c, currentlettercount, &resolution);
+                                        draw_letter_staggered(
+                                            game, c, currentlettercount, &resolution, &mut addtasks, &mut removetasks
+                                        );
                                         currentlettercount += 1;
                                     }
                                 }
@@ -300,7 +426,10 @@ pub(crate) fn gentlemen_synchronize_your_death_watches(game: &mut Game, displays
                                     c = ' ';
                                     // paused = true;
                                     println!("Typed character: {}", c);
-                                    draw_letter(game, c, currentlettercount, &resolution);
+                                    // draw_letter(game, c, currentlettercount, &resolution);
+                                    draw_letter_staggered(
+                                        game, c, currentlettercount, &resolution, &mut addtasks, &mut removetasks
+                                    );
                                     currentlettercount += 1;
                                 }
                                 if let Key::Named(NamedKey::Backspace) = &event.logical_key {
@@ -308,7 +437,10 @@ pub(crate) fn gentlemen_synchronize_your_death_watches(game: &mut Game, displays
                                     if currentlettercount > 0 {
                                         currentlettercount -= 1;
                                     }
-                                    draw_letter(game, c, currentlettercount, &resolution);
+                                    // draw_letter(game, c, currentlettercount, &resolution);
+                                    draw_letter_staggered(
+                                        game, c, currentlettercount, &resolution, &mut addtasks, &mut removetasks
+                                    );
                                     println!("Typed character: backspace");
                                 }
                             }
@@ -375,7 +507,7 @@ pub(crate) fn gentlemen_synchronize_your_death_watches(game: &mut Game, displays
                                lastcursorpos = coord.unpack();
 
                                game.addcell(coord);
-                           }
+                          }
                            else {
                                game.removecell(&coord);
                            }
@@ -387,6 +519,8 @@ pub(crate) fn gentlemen_synchronize_your_death_watches(game: &mut Game, displays
                     if !paused {
                         game.processactives_old();
                     }
+                    game.processtasks(&mut addtasks, &mut removetasks);
+
                     if(rand::random::<u8>() % 60 == 0) {
                         let duration = game.ts.stamp("processactives".to_string());
                         println!("Active cells: {}", game.active.len());
