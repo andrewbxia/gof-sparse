@@ -3,6 +3,7 @@ for computer science independent study class, first time learning rust, good luc
 a sparse implementation of [Conway's Game of Life](https://en.wikipedia.org/wiki/Conway's_Game_of_Life), with text input and scrolling
 
 Input methods:
+- keyboard (a-z, some special chars): write text to the screen, its size is dependent on camera zoom amount
 - mouse drag: place square of cells
 - scroll: zoom in-out
 - enter: pause simulation
